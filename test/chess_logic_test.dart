@@ -204,21 +204,29 @@ void main() {
       expect(perft(pos, 4), 197281);
     }, timeout: const Timeout(Duration(minutes: 2)));
 
-    test('Kiwipete 위치 perft 1~3 (캐슬링·앙파상 다수)', () {
-      final pos = fromFen(
-        'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -',
-      );
-      expect(perft(pos, 1), 48);
-      expect(perft(pos, 2), 2039);
-      expect(perft(pos, 3), 97862);
-    }, timeout: const Timeout(Duration(minutes: 2)));
+    test(
+      'Kiwipete 위치 perft 1~3 (캐슬링·앙파상 다수)',
+      () {
+        final pos = fromFen(
+          'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -',
+        );
+        expect(perft(pos, 1), 48);
+        expect(perft(pos, 2), 2039);
+        expect(perft(pos, 3), 97862);
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
 
-    test('Position 3 perft 1~4 (앙파상·핀 엣지케이스)', () {
-      final pos = fromFen('8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -');
-      expect(perft(pos, 1), 14);
-      expect(perft(pos, 2), 191);
-      expect(perft(pos, 3), 2812);
-      expect(perft(pos, 4), 43238);
-    }, timeout: const Timeout(Duration(minutes: 2)));
+    test(
+      'Position 3 perft 1~4 (앙파상·핀 엣지케이스)',
+      () {
+        final pos = fromFen('8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -');
+        expect(perft(pos, 1), 14);
+        expect(perft(pos, 2), 191);
+        expect(perft(pos, 3), 2812);
+        expect(perft(pos, 4), 43238);
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
   });
 }

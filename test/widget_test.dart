@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:g42/app.dart';
 import 'package:g42/core/services/identity_service.dart';
 import 'package:g42/core/services/local_room_service.dart';
+import 'package:g42/core/services/local_score_store.dart';
 
 void main() {
   testWidgets('로비에 등록된 게임 카드가 표시된다', (tester) async {
@@ -14,6 +15,7 @@ void main() {
       G42App(
         identity: identity,
         roomService: LocalRoomService(),
+        scoreStore: LocalScoreStore(),
         firebaseReady: false,
       ),
     );

@@ -6,6 +6,9 @@ import 'core/services/identity_service.dart';
 import 'core/services/room_service.dart';
 import 'core/services/firebase_room_service.dart';
 import 'core/services/local_room_service.dart';
+import 'core/services/score_store.dart';
+import 'core/services/firebase_score_store.dart';
+import 'core/services/local_score_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,11 +27,15 @@ Future<void> main() async {
   final RoomService roomService = firebaseReady
       ? FirebaseRoomService()
       : LocalRoomService();
+  final ScoreStore scoreStore = firebaseReady
+      ? FirebaseScoreStore()
+      : LocalScoreStore();
 
   runApp(
     G42App(
       identity: identity,
       roomService: roomService,
+      scoreStore: scoreStore,
       firebaseReady: firebaseReady,
     ),
   );

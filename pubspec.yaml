@@ -1,5 +1,5 @@
 name: g42
-description: "G42 - 둘이서 즐기는 미니게임 모음 (체스 / 오목 / 배틀쉽)"
+description: "G42 - 둘이서 즐기는 미니게임 모음 (체스 / 오목 / 배틀쉽 / 고스톱 등)"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -26,3 +26,18 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/hwatu/manifest.json
+    - assets/hwatu/January/
+    - assets/hwatu/February/
+    - assets/hwatu/March/
+    - assets/hwatu/April/
+    - assets/hwatu/May/
+    - assets/hwatu/June/
+    - assets/hwatu/July/
+    - assets/hwatu/August/
+    - assets/hwatu/September/
+    - assets/hwatu/October/
+    - assets/hwatu/November/
+    - assets/hwatu/December/

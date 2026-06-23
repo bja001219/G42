@@ -5,6 +5,7 @@ import '../core/game_definition.dart';
 import '../core/game_registry.dart';
 import '../theme.dart';
 import 'room_screen.dart';
+import 'stats_screen.dart';
 
 /// 첫 화면: 게임 선택 로비. GameRegistry에 게임을 추가하면 자동으로 늘어난다.
 class LobbyScreen extends StatefulWidget {
@@ -81,6 +82,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 ),
               ),
               const Spacer(),
+              _statsButton(context),
+              const SizedBox(width: 8),
               _modeChip(services),
             ],
           ),
@@ -97,6 +100,40 @@ class _LobbyScreenState extends State<LobbyScreen> {
           ],
           const SizedBox(height: 8),
         ],
+      ),
+    );
+  }
+
+  Widget _statsButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const StatsScreen())),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: G42Colors.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.bar_chart_rounded,
+              size: 16,
+              color: Colors.white70,
+            ),
+            SizedBox(width: 6),
+            Text(
+              '전적',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

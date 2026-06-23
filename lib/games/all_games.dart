@@ -1,7 +1,13 @@
 import '../core/game_definition.dart';
-import 'chess/chess_game.dart';
-import 'omok/omok_game.dart';
 import 'battleship/battleship_game.dart';
+import 'blackjack/blackjack_game.dart';
+import 'boggle/boggle_game.dart';
+import 'boggle/boggle_ko_game.dart';
+import 'chess/chess_game.dart';
+import 'gostop/gostop_game.dart';
+import 'omok/omok_game.dart';
+import 'onecard/onecard_game.dart';
+import 'reaction/reaction_game.dart';
 
 /// 앱에 내장된 게임 목록.
 ///
@@ -10,4 +16,10 @@ final List<GameDefinition> builtInGames = <GameDefinition>[
   ChessGame(),
   OmokGame(),
   BattleshipGame(),
+  ReactionGame(),
+  BlackjackGame(),
+  OneCardGame(),
+  BoggleGame(),
+  BoggleKoGame(),
+  GoStopGame(),
 ];

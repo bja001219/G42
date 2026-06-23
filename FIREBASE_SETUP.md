@@ -49,18 +49,21 @@ await Firebase.initializeApp(
 Firebase 콘솔 → **Firestore Database** → 데이터베이스 만들기 →
 **Native 모드** → 위치 선택.
 
-보안 규칙은 `firestore.rules` 참고. 데모용으로는 다음(개방형)으로 시작할 수 있다:
+보안 규칙은 `firestore.rules` 참고(이미 `rooms` + 고스톱 전적용 `profiles`/`headtohead`
+규칙 포함). 데모용으로는 다음(개방형)으로 시작할 수 있다:
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /rooms/{code} {
-      allow read, write: if true; // ⚠ 데모용. 운영 전 반드시 강화.
-    }
+    match /rooms/{code}        { allow read, write: if true; } // ⚠ 데모용
+    match /profiles/{id}       { allow read, write: if true; } // 고스톱 통산 전적
+    match /headtohead/{key}    { allow read, write: if true; } // 고스톱 상대 전적
   }
 }
 ```
+> ⚠ 모두 데모/개발용 개방형. 운영 전 Firebase Auth + 본인/당사자 문서만 쓰기,
+> 카운터 increment 검증으로 강화할 것.
 
 배포:
 
@@ -87,4 +90,11 @@ rooms/{CODE} = {
   hostId, turn, winner,
   state: { ...게임별 동기화 상태... }
 }
+
+# 고스톱 전적 (없어도 게임은 동작 — 미설정 시 로컬 저장)
+profiles/{playerId}   = { playerId, name, totalScore, wins, losses, rounds, nagari }
+headtohead/{pairKey}  = { pairKey, wins:{pid:n}, scores:{pid:n}, rounds, nagari }
 ```
+
+> 온라인 미설정(로컬 폴백) 상태에서는 전적이 기기 `shared_preferences`에 저장된다.
+> Firebase를 켜면 자동으로 Firestore의 위 컬렉션을 사용한다.

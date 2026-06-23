@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'core/services/identity_service.dart';
 import 'core/services/room_service.dart';
+import 'core/services/score_store.dart';
 import 'ui/lobby_screen.dart';
 import 'theme.dart';
 
@@ -9,12 +10,14 @@ import 'theme.dart';
 class G42App extends StatelessWidget {
   final IdentityService identity;
   final RoomService roomService;
+  final ScoreStore scoreStore;
   final bool firebaseReady;
 
   const G42App({
     super.key,
     required this.identity,
     required this.roomService,
+    required this.scoreStore,
     required this.firebaseReady,
   });
 
@@ -23,6 +26,7 @@ class G42App extends StatelessWidget {
     return AppServices(
       identity: identity,
       roomService: roomService,
+      scoreStore: scoreStore,
       firebaseReady: firebaseReady,
       child: MaterialApp(
         title: 'G42',
@@ -40,12 +44,14 @@ class G42App extends StatelessWidget {
 class AppServices extends InheritedWidget {
   final IdentityService identity;
   final RoomService roomService;
+  final ScoreStore scoreStore;
   final bool firebaseReady;
 
   const AppServices({
     super.key,
     required this.identity,
     required this.roomService,
+    required this.scoreStore,
     required this.firebaseReady,
     required super.child,
   });
@@ -60,5 +66,6 @@ class AppServices extends InheritedWidget {
   bool updateShouldNotify(AppServices oldWidget) =>
       identity != oldWidget.identity ||
       roomService != oldWidget.roomService ||
+      scoreStore != oldWidget.scoreStore ||
       firebaseReady != oldWidget.firebaseReady;
 }
