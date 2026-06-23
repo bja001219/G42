@@ -1,0 +1,28 @@
+name: g42
+description: "G42 - 둘이서 즐기는 미니게임 모음 (체스 / 오목 / 배틀쉽)"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # --- Firebase (온라인 멀티플레이 전송 계층) ---
+  firebase_core: ^3.6.0
+  cloud_firestore: ^5.4.4
+
+  # --- 로컬 식별/저장 ---
+  shared_preferences: ^2.3.2
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
