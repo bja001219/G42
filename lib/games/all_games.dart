@@ -2,7 +2,6 @@ import '../core/game_definition.dart';
 import 'battleship/battleship_game.dart';
 import 'blackjack/blackjack_game.dart';
 import 'boggle/boggle_game.dart';
-import 'boggle/boggle_ko_game.dart';
 import 'chess/chess_game.dart';
 import 'gostop/gostop_game.dart';
 import 'omok/omok_game.dart';
@@ -19,14 +18,7 @@ final List<GameDefinition> builtInGames = <GameDefinition>[
   ReactionGame(),
   BlackjackGame(),
   OneCardGame(),
-  // 보글: 4x4(클래식)·5x5(Big Boggle)·6x6·10x10(큰판) + 한글판도 동일하게 4종.
-  const BoggleGame(size: 4),
-  const BoggleGame(size: 5),
-  const BoggleGame(size: 6),
-  const BoggleGame(size: 10),
-  const BoggleKoGame(size: 4),
-  const BoggleKoGame(size: 5),
-  const BoggleKoGame(size: 6),
-  const BoggleKoGame(size: 10),
+  // 보글: 단일 게임. 영/한 + 4×4~10×10 크기는 방장이 시작 전 설정.
+  const BoggleGame(),
   GoStopGame(),
 ];

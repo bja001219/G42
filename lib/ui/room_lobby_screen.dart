@@ -92,9 +92,12 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
       if (game != null) {
         _startTriggered = true;
         final ids = room.playerIds;
+        final config = Map<String, dynamic>.from(
+          (room.state['config'] as Map?) ?? const <String, dynamic>{},
+        );
         _service.startGame(
           widget.code,
-          initialState: game.createInitialState(ids),
+          initialState: game.createInitialStateConfigured(ids, config),
           firstTurn: game.firstTurn(ids),
         );
       }
@@ -157,10 +160,76 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
 
   // ---- 방장: 게임 선택 ----
   Future<void> _pickGame(GameDefinition game) async {
+    // 시작 전 설정이 있는 게임(예: 보글)은 설정 시트를 먼저 띄운다.
+    if (game.hasSetup) {
+      final config = await _showSetupSheet(game);
+      if (config == null) return; // 취소
+      await _service.updateRoom(widget.code, {
+        'gameId': game.id,
+        'state': <String, dynamic>{'accept': 'pending', 'config': config},
+      });
+      return;
+    }
     await _service.updateRoom(widget.code, {
       'gameId': game.id,
       'state': <String, dynamic>{'accept': 'pending'},
     });
+  }
+
+  /// 방장 설정 시트. 선택한 설정 맵을 반환(취소 시 null).
+  Future<Map<String, dynamic>?> _showSetupSheet(GameDefinition game) {
+    var config = Map<String, dynamic>.from(
+      (_room?.state['config'] as Map?) ?? game.defaultConfig,
+    );
+    return showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: G42Colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            18,
+            20,
+            MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(game.icon, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${game.title} 설정',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              game.buildSetup(ctx, config, (c) => setSheet(() => config = c)),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(ctx, config),
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('이 설정으로 준비'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ---- 참가자: 수락/거절 ----
@@ -350,6 +419,13 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
   Widget _hostPickerView(Room room) {
     final accept = (room.state['accept'] as String?) ?? '';
     final games = GameRegistry.games;
+    final pendingGame = room.gameId.isEmpty
+        ? null
+        : GameRegistry.byId(room.gameId);
+    final pendingConfig = Map<String, dynamic>.from(
+      (room.state['config'] as Map?) ?? const <String, dynamic>{},
+    );
+    final pendingSummary = pendingGame?.configSummary(pendingConfig) ?? '';
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -368,9 +444,11 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
                 ),
                 const SizedBox(height: 4),
                 if (accept == 'pending' && room.gameId.isNotEmpty)
-                  const Text(
-                    '상대의 수락을 기다리는 중... (다른 게임으로 바꿔도 돼요)',
-                    style: TextStyle(color: G42Colors.warn, fontSize: 13),
+                  Text(
+                    pendingSummary.isEmpty
+                        ? '상대의 수락을 기다리는 중... (다른 게임으로 바꿔도 돼요)'
+                        : '상대의 수락을 기다리는 중 · $pendingSummary (바꿔도 돼요)',
+                    style: const TextStyle(color: G42Colors.warn, fontSize: 13),
                   )
                 else if (accept == 'declined')
                   const Text(
@@ -440,6 +518,12 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
       );
     }
 
+    final summary = game.configSummary(
+      Map<String, dynamic>.from(
+        (room.state['config'] as Map?) ?? const <String, dynamic>{},
+      ),
+    );
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -477,6 +561,27 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
                       fontSize: 13,
                     ),
                   ),
+                  if (summary.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        summary,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
