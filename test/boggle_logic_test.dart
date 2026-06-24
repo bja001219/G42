@@ -78,7 +78,10 @@ void main() {
       expect(BoggleLogic.canFormWord(size, grid, 'cat'), true); // 0-1-2
       expect(BoggleLogic.canFormWord(size, grid, 'cats'), true); // 0-1-2-3
       expect(BoggleLogic.canFormWord(size, grid, 'dog'), true); // 8-9-10
-      expect(BoggleLogic.canFormWord(size, grid, 'rat'), true); // r(6) a(5) t(2)
+      expect(
+        BoggleLogic.canFormWord(size, grid, 'rat'),
+        true,
+      ); // r(6) a(5) t(2)
     });
 
     test('칸 재사용이 필요한 단어는 불가', () {
@@ -214,7 +217,8 @@ void main() {
 
     test('canFormWord는 큰 보드에서도 동작', () {
       // 5x5 상단 행에 'hello' 배치, 나머지는 채움 문자.
-      const g = 'hello'
+      const g =
+          'hello'
           'xxxxx'
           'xxxxx'
           'xxxxx'

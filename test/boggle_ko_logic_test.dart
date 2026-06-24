@@ -39,7 +39,10 @@ void main() {
     expect(KoBoggleLogic.check(size, grid, '사람', {}), WordCheck.valid);
     expect(KoBoggleLogic.check(size, grid, '가', {}), WordCheck.tooShort);
     expect(KoBoggleLogic.check(size, grid, '사람', {'사람'}), WordCheck.duplicate);
-    expect(KoBoggleLogic.check(size, grid, '람나', {}), WordCheck.notInDictionary);
+    expect(
+      KoBoggleLogic.check(size, grid, '람나', {}),
+      WordCheck.notInDictionary,
+    );
     // '바다'는 사전엔 있으나 이 보드에선 만들 수 없음.
     expect(KoBoggleLogic.check(size, grid, '바다', {}), WordCheck.notOnBoard);
   });

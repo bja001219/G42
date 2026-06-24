@@ -13,8 +13,12 @@ import '../theme.dart';
 import 'game_host_screen.dart';
 import 'widgets/game_card.dart';
 
-/// 방 대기실(핵심). 둘 다 입장 → 방장이 게임 선택 → 참가자 수락 → 게임 시작 →
-/// 게임 종료 후 대기실 복귀(재선택/재대국). 온라인 전용.
+/// 방 대기실(핵심). 둘 다 입장 → 누구든 게임 제안 → 상대 수락 → 게임 시작 →
+/// 게임 종료 후 통합 프롬프트(같은 게임 더 / 게임 선택으로). 온라인 전용.
+///
+/// 게임 선택은 대칭이다: 방장/게스트 구분 없이 누구든 먼저 게임 카드를 고르면
+/// "제안자"(state["proposedBy"])가 되고, 상대는 [참가]/[거절]을 본다. 단, 실제
+/// startGame 트리거(단일 기록자)는 그대로 호스트만 담당한다(중복 시작 방지).
 class RoomLobbyScreen extends StatefulWidget {
   final String code;
   final bool isHost;
@@ -35,7 +39,10 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
   /// startGame을 이미 트리거했는지(단일 기록자=방장 중복 호출 방지).
   bool _startTriggered = false;
 
-  /// 이번 playing 세션을 이미 소비했는지(게임에서 '방으로' 복귀 후 재진입 래치).
+  /// 상대 퇴장 자동 홈 복귀를 이미 처리했는지(중복 토스트/pop 방지).
+  bool _opponentLeftHandled = false;
+
+  /// 이번 playing 세션을 이미 소비했는지(게임에서 복귀 후 재진입 래치).
   ///
   /// 게임 화면에서 pop으로 돌아오면 _inGame이 즉시 false가 되지만, 방 status는
   /// 여전히 playing(또는 게임 종료 시 finished)일 수 있다. 그 상태에서 다음
@@ -64,16 +71,27 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
     if (!mounted) return;
     setState(() => _room = room);
 
-    // status가 waiting으로 되돌아오면(=대기실 리셋 완료) 재진입 래치를 푼다.
+    // status가 waiting으로 되돌아오면(=대기실 리셋/재제안 완료) 재진입 래치를 푼다.
     // 이로써 다음 게임 세션에서는 다시 한 번 _goToGame이 트리거될 수 있다.
     if (room.status == RoomStatus.waiting) {
       _consumedPlaying = false;
     }
 
-    // 역전이: 게임 화면에 있는데 더 이상 playing이 아니면(방장이 대기실로 리셋했거나
-    // 게임이 끝난 직후 등) 게임 화면을 자동으로 빠져나온다. 이게 없으면 게스트가
-    // gameId='' 상태의 게임 화면에서 무한 스피너에 갇힌다(단일 기록자 리셋이
-    // 상대를 게임 밖으로 끌어내는 신호로 작동하도록 만든다).
+    // 상대 퇴장 감지(나가기 대칭): 한 명만 남고 finished면 상대가 완전히 나간 것.
+    // 게임 중이든 대기실이든, _inGame 여부와 무관하게 홈까지 자동 복귀시킨다.
+    // (정상 종료 finished&&isFull 은 이 분기에 걸리지 않고 GameHostScreen의
+    //  통합 프롬프트가 처리한다.)
+    if (!room.isFull &&
+        room.status == RoomStatus.finished &&
+        !_opponentLeftHandled) {
+      _opponentLeftHandled = true;
+      _handleOpponentLeft(room);
+      return;
+    }
+
+    // 역전이: 게임 화면에 있는데 더 이상 playing이 아니면(상대/내가 대기실로
+    // 리셋했거나 게임이 끝난 직후 등) 게임 화면을 자동으로 빠져나온다. 이게 없으면
+    // gameId='' 상태의 게임 화면에서 무한 스피너에 갇힌다.
     if (_inGame && room.status == RoomStatus.waiting) {
       Navigator.of(context).pop();
       return;
@@ -81,7 +99,7 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
 
     final accept = (room.state['accept'] as String?) ?? '';
 
-    // 단일 기록자(방장): 참가자가 수락하면 게임을 시작한다.
+    // 단일 기록자(방장): 누가 제안했든 상대가 수락하면 게임을 시작한다.
     if (widget.isHost &&
         !_startTriggered &&
         room.status == RoomStatus.waiting &&
@@ -109,6 +127,24 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
     }
   }
 
+  /// 상대가 완전히 나갔다. 게임 중이든 대기실이든 홈까지 자동 복귀한다.
+  /// 상대 기권으로 내가 승점을 얻었으면 그에 맞는 토스트를 띄운다.
+  void _handleOpponentLeft(Room room) {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    // 내가 나간 경우(players에서 내가 빠짐)엔 토스트 없이 홈으로만.
+    final iLeft = room.playerById(_myId) == null;
+    final forfeit = room.state['forfeit'] == true;
+    final forfeitWinnerId = room.state['forfeitWinnerId'] as String?;
+    final iWonByForfeit = forfeit && forfeitWinnerId == _myId;
+
+    navigator.popUntil((r) => r.isFirst);
+    if (iLeft) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text(iWonByForfeit ? '상대 기권 — 1점 획득!' : '상대가 나갔습니다')),
+    );
+  }
+
   // ---- 게임 화면 진입 후 복귀 처리 ----
   Future<void> _goToGame(String gameId) async {
     _inGame = true;
@@ -122,43 +158,22 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
     await navigator.push(
       MaterialPageRoute(builder: (_) => GameHostScreen(session: session)),
     );
-    // 게임 화면에서 돌아옴('방으로' 복귀 또는 게임 종료 후 복귀).
+    // 게임 화면에서 돌아옴. 복귀 경로는 둘 중 하나다:
+    //  - 통합 프롬프트가 status=waiting(재제안/게임선택)으로 바꿔 역전이 pop된 경우.
+    //  - 상대 퇴장 등으로 빠져나온 경우.
+    // 어느 쪽이든 status 리셋/재제안은 게임 화면의 프롬프트가 책임지므로, 여기서는
+    // 더 이상 호스트가 대기실을 리셋하지 않는다(프롬프트의 재제안을 덮어쓰지 않게).
     _inGame = false;
     _startTriggered = false;
-    // 같은 playing/finished 세션에서 재진입하지 않도록 래치를 건다.
-    // 단, 이미 status가 waiting으로 리셋된 뒤에 돌아왔다면(역전이 pop 등) 래치를
-    // 걸지 않는다 — 그래야 다음 게임 세션 진입이 막히지 않는다.
+    // 같은 playing/finished 세션에서 재진입하지 않도록 래치를 건다. 단, 이미
+    // status가 waiting으로 리셋된 뒤에 돌아왔다면(역전이 pop) 래치를 걸지 않는다.
     final returnedStatus = _room?.status;
     _consumedPlaying =
         returnedStatus == RoomStatus.playing ||
         returnedStatus == RoomStatus.finished;
-    if (!mounted) return;
-
-    // 방장이 대기실 리셋을 책임진다(단일 기록자).
-    //
-    // 핵심: '게임 자연 종료(finished)'와 '상대 퇴장(leaveRoom)'을 구분한다. 둘 다
-    // status=finished를 쓰지만, 퇴장은 players를 제거하므로 players.length로 갈린다.
-    //  - 두 명 그대로 남아있다 → 게임이 끝났거나 도중에 '방으로' 나온 것 → 대기실 리셋.
-    //  - 한 명만 남았다(상대 퇴장) → 리셋하지 않고 finished 화면을 유지한다.
-    if (widget.isHost) {
-      final current = _room;
-      if (current != null && current.isFull) {
-        await _resetToWaiting();
-      }
-    }
   }
 
-  Future<void> _resetToWaiting() async {
-    await _service.updateRoom(widget.code, {
-      'status': RoomStatus.waiting.name,
-      'gameId': '',
-      'turn': null,
-      'winner': null,
-      'state': <String, dynamic>{},
-    });
-  }
-
-  // ---- 방장: 게임 선택 ----
+  // ---- 게임 선택(대칭): 누구든 제안할 수 있다 ----
   Future<void> _pickGame(GameDefinition game) async {
     // 시작 전 설정이 있는 게임(예: 보글)은 설정 시트를 먼저 띄운다.
     if (game.hasSetup) {
@@ -166,17 +181,21 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
       if (config == null) return; // 취소
       await _service.updateRoom(widget.code, {
         'gameId': game.id,
-        'state': <String, dynamic>{'accept': 'pending', 'config': config},
+        'state': <String, dynamic>{
+          'accept': 'pending',
+          'proposedBy': _myId,
+          'config': config,
+        },
       });
       return;
     }
     await _service.updateRoom(widget.code, {
       'gameId': game.id,
-      'state': <String, dynamic>{'accept': 'pending'},
+      'state': <String, dynamic>{'accept': 'pending', 'proposedBy': _myId},
     });
   }
 
-  /// 방장 설정 시트. 선택한 설정 맵을 반환(취소 시 null).
+  /// 설정 시트. 선택한 설정 맵을 반환(취소 시 null).
   Future<Map<String, dynamic>?> _showSetupSheet(GameDefinition game) {
     var config = Map<String, dynamic>.from(
       (_room?.state['config'] as Map?) ?? game.defaultConfig,
@@ -232,11 +251,12 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
     );
   }
 
-  // ---- 참가자: 수락/거절 ----
-  Future<void> _accept() async {
-    await _service.updateRoom(widget.code, {
-      'state': <String, dynamic>{'accept': 'accepted'},
-    });
+  // ---- 상대(피제안자): 수락/거절 ----
+  Future<void> _accept(Room room) async {
+    // 기존 state(proposedBy/config 등)를 보존하고 accept만 갱신한다.
+    final newState = Map<String, dynamic>.from(room.state);
+    newState['accept'] = 'accepted';
+    await _service.updateRoom(widget.code, {'state': newState});
   }
 
   Future<void> _decline() async {
@@ -250,7 +270,8 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
   Future<void> _leave() async {
     final navigator = Navigator.of(context);
     await _service.leaveRoom(widget.code, _myId);
-    navigator.pop();
+    if (!mounted) return;
+    navigator.popUntil((r) => r.isFirst);
   }
 
   @override
@@ -303,10 +324,10 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // 상대가 실제로 빠졌을 때만(=players<2) '상대 퇴장' 화면을 띄운다.
-    // 게임 자연 종료(finished지만 두 명 그대로)는 여기 해당하지 않는다.
+    // 상대 퇴장(players<2 && finished)은 _onRoom에서 자동 홈 복귀로 처리하므로,
+    // 여기서는 잠깐 로딩만 보여준다(곧 popUntil로 빠져나간다).
     if (!room.isFull && room.status == RoomStatus.finished) {
-      return _finishedView();
+      return _returningView();
     }
 
     // 게임 화면 push 중이면 잠깐 로딩만 보여준다.
@@ -314,9 +335,7 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // 게임에서 복귀했지만 아직 status가 playing/finished다.
-    //  - 방장: 곧 _resetToWaiting을 호출하므로 잠깐 로딩.
-    //  - 게스트: 방장의 waiting 리셋 전파를 기다린다(재진입 금지, 명시적 대기 UI).
+    // 게임에서 복귀했지만 아직 status가 playing/finished다(곧 waiting으로 전이).
     if (room.status == RoomStatus.playing ||
         room.status == RoomStatus.finished) {
       return _returningView();
@@ -327,11 +346,29 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
       return _waitingForOpponentView(room);
     }
 
-    // 둘 다 입장(waiting): picker / accept 흐름.
-    return widget.isHost ? _hostPickerView(room) : _guestView(room);
+    // 둘 다 입장(waiting): 제안 상태/proposedBy 기준으로 분기(대칭).
+    return _lobbyView(room);
   }
 
-  // ---- 게임 복귀 직후: 대기실 리셋 대기 ----
+  // ---- 대기실 본문: 제안 상태로 분기(방장/게스트 구분 없음) ----
+  Widget _lobbyView(Room room) {
+    final accept = (room.state['accept'] as String?) ?? '';
+    final proposedBy = room.state['proposedBy'] as String?;
+    final hasActiveProposal = room.gameId.isNotEmpty && accept == 'pending';
+
+    // 활성 제안 없음: 양쪽 다 picker. (거절 직후면 안내 후 picker.)
+    if (!hasActiveProposal) {
+      return _pickerView(room, declined: accept == 'declined');
+    }
+
+    // 활성 제안 있음: 제안자는 picker(변경 가능), 상대는 수락/거절.
+    if (proposedBy == _myId) {
+      return _pickerView(room, waitingAccept: true);
+    }
+    return _acceptView(room);
+  }
+
+  // ---- 게임 복귀 직후 / 전이 대기 ----
   Widget _returningView() {
     return const Center(
       child: Column(
@@ -415,9 +452,15 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
     );
   }
 
-  // ---- 방장: 게임 선택 그리드 ----
-  Widget _hostPickerView(Room room) {
-    final accept = (room.state['accept'] as String?) ?? '';
+  // ---- 게임 선택 그리드(대칭: 누구나 제안 가능) ----
+  ///
+  /// [waitingAccept]가 true면 "내가 제안자, 상대 수락 대기 중(바꿔도 됨)" 안내.
+  /// [declined]가 true면 "상대가 거절했어요" 안내 후 다시 고르도록 한다.
+  Widget _pickerView(
+    Room room, {
+    bool waitingAccept = false,
+    bool declined = false,
+  }) {
     final games = GameRegistry.games;
     final pendingGame = room.gameId.isEmpty
         ? null
@@ -443,16 +486,16 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                if (accept == 'pending' && room.gameId.isNotEmpty)
+                if (waitingAccept)
                   Text(
                     pendingSummary.isEmpty
-                        ? '상대의 수락을 기다리는 중... (다른 게임으로 바꿔도 돼요)'
-                        : '상대의 수락을 기다리는 중 · $pendingSummary (바꿔도 돼요)',
+                        ? '상대 수락 대기 중 (다른 게임으로 바꿔도 됨)'
+                        : '상대 수락 대기 중 · $pendingSummary (바꿔도 됨)',
                     style: const TextStyle(color: G42Colors.warn, fontSize: 13),
                   )
-                else if (accept == 'declined')
+                else if (declined)
                   const Text(
-                    '참가자가 거절했어요. 다른 게임을 골라보세요.',
+                    '상대가 거절했어요. 다른 게임을 골라보세요.',
                     style: TextStyle(color: G42Colors.bad, fontSize: 13),
                   )
                 else
@@ -476,7 +519,7 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
             delegate: SliverChildBuilderDelegate(
               (context, i) => GameCard(
                 game: games[i],
-                selected: room.gameId == games[i].id,
+                selected: waitingAccept && room.gameId == games[i].id,
                 onTap: () => _pickGame(games[i]),
               ),
               childCount: games.length,
@@ -487,30 +530,8 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
     );
   }
 
-  // ---- 참가자: 게임 고르는 중 / 수락·거절 ----
-  Widget _guestView(Room room) {
-    final accept = (room.state['accept'] as String?) ?? '';
-
-    if (room.gameId.isEmpty || accept != 'pending') {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
-            SizedBox(height: 16),
-            Text(
-              '방장이 게임을 고르는 중...',
-              style: TextStyle(color: Colors.white60, fontSize: 15),
-            ),
-          ],
-        ),
-      );
-    }
-
+  // ---- 피제안자: 상대가 고른 게임 수락/거절 ----
+  Widget _acceptView(Room room) {
     final game = GameRegistry.byId(room.gameId);
     if (game == null) {
       return const Center(
@@ -531,7 +552,7 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Text(
-              '방장이 선택한 게임',
+              '상대가 선택한 게임',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
             const SizedBox(height: 16),
@@ -604,38 +625,12 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _accept,
-                    child: const Text('수락'),
+                    onPressed: () => _accept(room),
+                    child: const Text('참가'),
                   ),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ---- 상대가 나가서 방이 종료됨 ----
-  Widget _finishedView() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.exit_to_app_rounded,
-              size: 48,
-              color: Colors.white38,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '상대가 방을 나갔어요.',
-              style: TextStyle(color: Colors.white70, fontSize: 16),
-            ),
-            const SizedBox(height: 24),
-            FilledButton(onPressed: _leave, child: const Text('홈으로')),
           ],
         ),
       ),

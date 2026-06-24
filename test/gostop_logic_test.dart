@@ -635,6 +635,52 @@ void main() {
       for (final v in (r.state['captured'] as Map).values) {
         expect(v, isA<List<int>>());
       }
+      // lastMove도 평탄(스펙 §B/§L "lastMove 평탄"): 모든 값은 스칼라 또는
+      // List<int> — List 안의 List 금지. 새 안무 메타가 가장 회귀 위험이 큰 면이라
+      // 명시적으로 가드한다.
+      expectFlatLastMove(r.state['lastMove']);
     });
+
+    test('playBomb 후 lastMove도 평탄(List 안의 List 없음)', () {
+      // 손 1월 3장(0,2,3) + 잡카드(16) + 바닥 1월 1장(1), 더미 보충 2장.
+      // (기존 폭탄 테스트와 동일 구성.)
+      final st = mkState(
+        hand0: [0, 2, 3, 16],
+        floor: [1, 20],
+        stock: [24, 36, 40],
+        cap1: [6, 7, 10],
+      );
+      final r = GoStopLogic.playBomb(st, 'a', 1);
+      // lastMove의 모든 값이 평탄(스칼라 또는 List<int>).
+      expectFlatLastMove(r.state['lastMove']);
+      // bombCards / replenished 가 평탄 List<int> 임을 명시 확인.
+      final lm = r.state['lastMove'] as Map;
+      expect(lm['bombCards'], isA<List<int>>());
+      expect(lm['replenished'], isA<List<int>>());
+    });
+  });
+}
+
+/// lastMove 맵의 모든 값이 평탄(스칼라 int/String 또는 `List<int>`)인지 단언한다.
+/// 스펙 §L "lastMove 평탄" 불변 가드: List 안의 List 회귀 방지.
+void expectFlatLastMove(dynamic lastMove) {
+  expect(lastMove, isA<Map>());
+  final lm = lastMove as Map;
+  lm.forEach((key, value) {
+    if (value is List) {
+      // List 값은 반드시 평탄(요소가 다시 List이면 안 됨) — List<int> 형태.
+      expect(
+        value,
+        isA<List<int>>(),
+        reason: 'lastMove["$key"]는 평탄 List<int>여야 함(List 안의 List 금지)',
+      );
+    } else {
+      // 스칼라(int/String)만 허용.
+      expect(
+        value is int || value is String,
+        isTrue,
+        reason: 'lastMove["$key"]는 스칼라(int/String)여야 함 (실제: $value)',
+      );
+    }
   });
 }

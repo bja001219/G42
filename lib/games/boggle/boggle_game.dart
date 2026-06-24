@@ -40,8 +40,10 @@ class BoggleGame extends GameDefinition {
   bool get hasSetup => true;
 
   @override
-  Map<String, dynamic> get defaultConfig =>
-      const <String, dynamic>{'size': 8, 'lang': 'ko'};
+  Map<String, dynamic> get defaultConfig => const <String, dynamic>{
+    'size': 8,
+    'lang': 'ko',
+  };
 
   // ---- 설정 정규화 / 규칙 빌드 ----------------------------------------------
 

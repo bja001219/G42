@@ -148,3 +148,177 @@
 1. 백그라운드 리서치(`wkmza4uaa`) 완료 → §3 타이밍/§6 기법/§7 체크리스트 확정.
 2. 본 문서 최종본 확정.
 3. 구현(View 전면 재작성 + logic 직전수 메타 소폭 추가) → 빌드·동작 검증.
+
+---
+---
+
+# 부록: 리서치 반영 구현 상세 (단일 진실 소스)
+
+> 리서치 워크플로 `wkmza4uaa`(6 에이전트) 결과 반영. 구현 에이전트는 이 부록을
+> 1순위 기준으로 따른다. 실제 유명 맞고(피망 뉴맞고/한게임 신맞고/넷마블) 관례 기반.
+
+## A. 모듈 구성
+
+| 파일 | 역할 | 변경 |
+|------|------|------|
+| `lib/games/gostop/gostop_logic.dart` | 룰/점수 엔진 | **소폭 추가만**: `lastMove`/`moveSeq` 기록 (§B). 기존 동작·반환 불변 |
+| `lib/games/gostop/gostop_cards.dart` | 카드 정적 데이터 | 변경 없음 |
+| `lib/games/gostop/gostop_card_widget.dart` | 카드 1장 위젯 | 월 배지·glow·flip 지원 추가 (§J) |
+| `lib/games/gostop/gostop_geometry.dart` | **신규**: 순수 레이아웃 수학 | 바닥 원형 앵커/손패 부채꼴/존 사각형 (§D) |
+| `lib/games/gostop/gostop_view.dart` | 인게임 화면 | **전면 재작성**: 풀스크린 Stack 테이블 + 애니 엔진 (§C·E~I) |
+| `test/gostop_view_test.dart` | 뷰 위젯 테스트 | 신규 UI에 맞게 갱신 (§L) |
+
+새 패키지 추가 금지. 애니/햅틱은 Flutter 내장만.
+
+## B. 상태 계약 추가 — `lastMove` / `moveSeq` (온라인 상대 턴 재생용)
+
+문제: 온라인에선 상대 화면의 수가 *결과 상태*로만 도착 → 안무 재생하려면 "직전 수
+상세"가 필요. `PlayResult`에만 있고 상태엔 없음 → 상태에 기록한다.
+
+- `gostop_logic.dart`에 추가:
+  - 최상위 `moveSeq`: int. 카드 수(playHandCard/playBomb)마다 +1. `_clone`/`createInitialState`에서 보존(기본 0).
+  - 최상위 `lastMove`: `Map<String,dynamic>` (JSON-safe, **List-in-List 금지**, 값은 스칼라 또는 `List<int>`):
+    ```
+    {
+      'actor':        String,      // 수를 둔 pid
+      'kind':         String,      // 'play' | 'bomb'
+      'playedCard':   int,         // 손패에서 낸 카드 (bomb은 대표 1장; bombCards 참조)
+      'bombCards':    List<int>,   // bomb일 때 손패 3장 (아니면 [])
+      'handCaptured': List<int>,   // 손패 단계에서 먹은 카드들 (뻑/깔림이면 [])
+      'handToFloor':  List<int>,   // 손패 단계에서 바닥에 놓인 카드들 (뻑은 되돌린 것 포함)
+      'flippedCard':  int,         // 더미에서 뒤집은 비-보너스 카드 (없으면 -1)
+      'flipCaptured': List<int>,   // 뒤집기로 먹은 카드들 ([] 가능)
+      'flipToFloor':  List<int>,   // 뒤집기 카드가 바닥에 놓였으면 그 카드 (아니면 [])
+      'bonus':        List<int>,   // 자동 수집 보너스패
+      'stolen':       List<int>,   // 상대에게서 가져온 피 id들
+      'replenished':  List<int>,   // bomb 손패 보충 카드 (아니면 [])
+      'event':        String,      // lastEvent 와 동일 코드
+      'seq':          int          // == moveSeq
+    }
+    ```
+  - 기록 위치: `playHandCard`/`playBomb` 반환 직전. 내부에서 이미 추적 중인 변수
+    (`handTaken`, `floor.add`, `flipped`, `stealCount` 등)로 채운다.
+  - `_clone`은 `moveSeq` 보존(없으면 0), `lastMove`는 **보존 안 함**(매 수 덮어씀;
+    declareGo/Stop/Shake 등 비-카드수는 lastMove 없음 → 재생 안 함이 맞음).
+- `gostop_view.dart`의 `_freshState()`도 `moveSeq` 보존, `lastMove`는 비-카드수 경로라
+  넘기지 않음(기존처럼).
+- **JSON 안전**: `lastMove`의 모든 값은 평탄. 기존 "List 안의 List 금지" 테스트 통과.
+
+## C. 애니메이션 아키텍처 (가장 중요)
+
+원칙 1 — **상태 커밋은 즉시, 애니메이션은 코스메틱.** 탭 즉시 `playHandCard`→`submit`.
+절대 애니메이션 뒤로 submit을 미루지 않는다(온라인 정합성 + `pumpAndSettle` 호환).
+
+원칙 2 — **표시 상태(displayed) ≠ 권위 상태(authoritative)를 분리.** 권위 상태가
+바뀌면(내 수든 상대 수든) `lastMove`(+필요 시 prev↔new diff)로 안무를 큐에 넣어
+displayed를 new로 모핑 → 끝나면 displayed=authoritative. 내 수/상대 수 **동일 경로**.
+
+원칙 3 — **연출 중 입력 잠금** (로컬 bool `_animating`). submit은 이미 끝났으니
+잠금은 추가 탭 방지용. 연출 끝나면 해제.
+
+원칙 4 — **핫시트 커튼은 연출 후.** 내 수 연출이 끝난 뒤에 차례 전환 커튼을 올린다
+(연출 중 커튼이 덮지 않게). `awaitingGoStop`이면 커튼 대신 고/스톱 패널.
+
+원칙 5 — **타이머 금지, 컨트롤러 기반.** 프레임-크리티컬 안무는 `AnimationController`
+(+`Interval`/`TweenSequence`) 또는 컨트롤러 체인(status 리스너)로. `Future.delayed`
+큐는 지터·테스트 비호환으로 지양(서스펜스 홀드는 컨트롤러의 정지 구간으로).
+
+원칙 6 — **수명/성능.** 모든 컨트롤러 `dispose`. `AnimatedBuilder` 안에서 매 프레임
+`setState` 금지. `build()`마다 `forward()` 금지(수 변화 감지 시에만). 카드 이동은
+풀스크린 단일 `Stack` + `Positioned`, 서로 다른 서브트리 간 "날아가 붙기"는
+`Overlay`+`GlobalKey`/`RenderBox`로(완료 시 `OverlayEntry.remove()`).
+
+## D. 지오메트리 API (`gostop_geometry.dart`, 순수 함수)
+
+```dart
+class GoStopGeometry {
+  final Size size;                 // 테이블 영역 크기
+  const GoStopGeometry(this.size);
+
+  // 존 사각형(세로 3-존, §E 비율)
+  Rect get opponentZone; Rect get fieldZone; Rect get myZone;
+  Offset get deckCenter;           // fieldZone 중앙
+  double get cardWidth;            // 화면폭 기반 비율(스크롤 없이 맞춤)
+
+  // 바닥: 월(1..12)별 슬롯 앵커 — 더미 둘레 유기적 군집(좌우 가중 1.15),
+  // 같은 달은 항상 같은 앵커. 등장 순서(월 목록)로 결정적 배치.
+  Offset floorAnchor(int month, List<int> presentMonths);
+  // 같은 달 n번째 카드의 오프셋(겹침 ~20%).
+  Offset stackOffset(int indexInMonth);
+
+  // 손패 부채꼴: i번째/총 n장 → 카드 중심 위치 + Z회전(rad). spread ~26~30°,
+  // 피벗은 카드 아래(아크), 가로 중앙.
+  ({Offset pos, double angle}) handSlot(int i, int n);
+
+  // 먹은 패 분류별 줄 위치(광/열끗/띠/피), 줄 내 i번째 오프셋(겹침).
+  Offset capturedSlot(GoStopGroup group, int i, bool mine);
+}
+enum GoStopGroup { gwang, animal, ribbon, junk }
+```
+좌표는 모두 size 비율로 산출(고정 폭 가정 금지). `LayoutBuilder`로 size 주입.
+
+## E. 레이아웃 (세로 3-존, 무스크롤) — research §1
+
+세로 기준 H. 위→아래: 상대 프로필 ~9% → 상대 손패(뒷면) ~9% → 상대 먹은패 ~9% →
+**중앙 필드(바닥+더미) ~35%** → 내 먹은패 ~9% → 내 손패(부채꼴) ~13% → 하단 ~16%.
+- 더미: fieldZone 정중앙 뒷면 스택 + `×N` 잔량 배지.
+- 점수/고 카운트: 각자 존 안(상대=상단, 나=하단). **중앙 필드엔 점수 패널 금지.**
+- 배경 진녹색 펠트 + 좌우 얇은(8–12px) 우드 프레임(#3D1C00 계열). 흰 배경 금지.
+- 아바타: 상대 좌상단 / 나 좌하단(원형). 옵션 아이콘 우상단.
+
+## F. 바닥 배치 — research §2
+- 8장(딜) 이후 가변. 더미 둘레 **느슨한 유기적 군집**(엄격한 시계 방사형 금지).
+- 같은 달은 한 앵커에 ~20% 오프셋 스택(페어/트리플 보이게). 카드 누적·이동.
+- 더미는 항상 정중앙(한쪽 몰림 금지).
+
+## G. 턴 안무 + 붙음/낙하 — research §3 (타이밍 카탈로그)
+
+2비트: (1) 손패 내기 (2) 더미 뒤집기. 단계/노말 타이밍(ms):
+손패→바닥 슬라이드 150–250 · 바닥 하이라이트 50–100 · 2장 캡처 스윕 200–300 ·
+더미 플립 회전 150–200 · **서스펜스 홀드 300–600** · 매치 스냅+글로우 100–150 ·
+이벤트 배너 등장 200–300 · 배너 홀드 500–800 · 피 이동 400–600 · 판쓸이 정지 500–800.
+- 타이밍 상수는 한곳(`_AnimTimings`)에 모아 추후 노말/스피드 토글 대비.
+- **붙음(매치)**: 대상 무더기로 비행 → `Curves.elasticOut` 스냅 + 글로우 플래시 +
+  강한 햅틱. **낙하(안 붙음)**: 빈 바닥으로 `Curves.easeOut` 드롭, 글로우 없음, 약 햅틱.
+- 카드 이동 일반 커브 `Curves.fastOutSlowIn`/`easeInOut`.
+
+## H. 특수 이벤트 콜아웃 + 고/스톱 — research §4
+- 인-플레이 콜아웃(가운데 큰 배너, 0.8–1.5s, 스케일-인+페이드, 색/아이콘 구분):
+  뻑/자뻑/쪽/따닥/쓸기/폭탄/흔들기/총통. `lastEvent`/`lastMove.event`로 트리거.
+  (기존 `_eventLabel` 매핑 재사용·격상; 하단 스낵바 폐기.)
+- 고/스톱: `awaitingGoStop==me`일 때 **큰 버튼 패널**(현재 점수 + 예상 가산 표기)
+  [고]/[스톱]. 기존 AlertDialog 대체. 로직 `declareGo/declareStop` 그대로.
+- 폭탄 버튼/흔들기 확인: 기존 조건·로직 유지, UI만 테이블 톤으로.
+- 피박/광박/고박/나가리는 **결과 화면 콜아웃**(인-플레이 팝업 아님) — §8/기존 분해 재사용.
+
+## I. 먹은 패 & 점수 — research §5
+- 분류별 분리 줄(광/열끗/띠/피), 줄 내 ~15–20% 겹침 캐스케이드. 단일 더미 합치기 금지.
+- 피는 길게(20장+), 광은 짧게(≤5) — 시각 무게 차이. 쌍피/3피는 1장+카운트(2장으로 안 그림).
+- 점수 큰 숫자(존 안), 고 카운트 배지 상시. (점수/박 계산은 기존 로직 그대로.)
+
+## J. 카드 위젯 변경 (`gostop_card_widget.dart`)
+- 앞면 상단에 **월 번호 배지**(작은 화면 가독). 기존 이미지/보너스/뒷면 드로우 유지.
+- `glow`(매치 강조), `dim`(비대상) 파라미터 추가. 기존 `selected` 들림 유지.
+- 3D Y축 플립 지원: `Matrix4..setEntry(3,2,0.001)..rotateY(t)`, 중간점 앞/뒷면 전환,
+  뒷면 미러링 방지. (뷰의 더미 플립에서 사용.)
+- 탭 타깃: `Transform`은 paint-only → 반드시 `GestureDetector`가 `Transform`을 감쌈.
+
+## K. 햅틱 매핑 (HapticFeedback)
+- 카드 내기/일반 먹기: `selectionClick`. 매치 스냅(붙음)·쪽·따닥·폭탄·쓸기: `mediumImpact`.
+- 뻑·총통·고/스톱 확정: `heavyImpact`. 낙하(안 붙음): `lightImpact` 또는 없음.
+
+## L. 테스트 영향 / 갱신 방침
+- `gostop_logic_test.dart`: **수정 없이 전부 통과해야 함**(lastMove/moveSeq 추가는 비파괴).
+  특히 "List 안의 List 없음" 통과(lastMove 평탄).
+- `gostop_view_test.dart`: 신규 UI에 맞게 갱신하되 **두 행위는 보존**:
+  ① GoStopView가 정상 빌드(테이블/카드/점수 표시) — 텍스트 라벨 단언은 신규 UI 요소
+     (예: 점수 숫자, 더미 잔량, 카드 위젯 존재)로 교체.
+  ② 손패 카드 탭 → `room.state.hands.host` 길이가 즉시 감소(`pumpAndSettle` 후).
+     이를 위해 손패 카드에 식별 `Key` 부여하고 테스트가 그 카드를 탭하도록.
+- 빌드 게이트: `flutter analyze` 무경고(가능한), `flutter test` 전부 통과.
+
+## M. 불변 계약 (재확인)
+- 로직 반환/상태 키 의미 불변(추가만). 점수/박/총통/나가리/3뻑/자뻑/따닥/쪽/쓸기/보너스
+  동작 동일. `GameSession.submit/rematch`, room.state 통째 제출.
+- 온라인(Firebase)·핫시트 양쪽 동작. 자동 처리(총통/3뻑/나가리/전적기록 1회) 유지.
+- `score_store` 기록 계약·중복가드 유지. 핫시트 커튼 유지(연출 후).

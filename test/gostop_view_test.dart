@@ -8,6 +8,7 @@ import 'package:g42/core/models/room.dart';
 import 'package:g42/core/services/identity_service.dart';
 import 'package:g42/core/services/local_room_service.dart';
 import 'package:g42/core/services/local_score_store.dart';
+import 'package:g42/games/gostop/gostop_card_widget.dart';
 import 'package:g42/games/gostop/gostop_view.dart';
 
 /// 테스트용 결정적 진행 상태(랜덤 딜 대신 작은 손패/바닥으로).
@@ -30,9 +31,13 @@ Map<String, dynamic> _testState() => <String, dynamic>{
   'firstTurn': false,
   'awaitingGoStop': '',
   'lastEvent': 'none',
+  'moveSeq': 0,
 };
 
-Future<GameSession> _setupSession(LocalRoomService svc) async {
+Future<GameSession> _setupSession(
+  LocalRoomService svc, {
+  bool hotseat = true,
+}) async {
   final room = await svc.createRoom(
     gameId: 'gostop',
     host: const RoomPlayer(id: 'host', name: '호스트'),
@@ -46,11 +51,13 @@ Future<GameSession> _setupSession(LocalRoomService svc) async {
     myPlayerId: 'host',
     roomCode: room.code,
     service: svc,
-    hotseat: true,
+    hotseat: hotseat,
   );
 }
 
-Widget _wrap(GameSession session, Room room, IdentityService identity) {
+/// 실제 프로덕션 경로(StreamBuilder 가 session.watch() 갱신을 받아 GoStopView 를
+/// 새 room 으로 리빌드 → didUpdateWidget → 안무 트리거)를 재현하는 래퍼.
+Widget _wrapLive(GameSession session, IdentityService identity) {
   return AppServices(
     identity: identity,
     roomService: session.service,
@@ -58,11 +65,21 @@ Widget _wrap(GameSession session, Room room, IdentityService identity) {
     firebaseReady: false,
     child: MaterialApp(
       home: Scaffold(
-        body: GoStopView(
-          session: session,
-          room: room,
-          createInitialState: (ids) => _testState(),
-          firstTurn: (ids) => ids.first,
+        body: SizedBox(
+          width: 400,
+          height: 800,
+          child: StreamBuilder<Room>(
+            stream: session.watch(),
+            builder: (context, snap) {
+              if (!snap.hasData) return const SizedBox.shrink();
+              return GoStopView(
+                session: session,
+                room: snap.data!,
+                createInitialState: (ids) => _testState(),
+                firstTurn: (ids) => ids.first,
+              );
+            },
+          ),
         ),
       ),
     ),
@@ -70,44 +87,71 @@ Widget _wrap(GameSession session, Room room, IdentityService identity) {
 }
 
 void main() {
-  testWidgets('고스톱 인게임이 손패/바닥/점수와 함께 빌드된다', (tester) async {
+  testWidgets('고스톱 인게임이 테이블/카드/점수와 함께 빌드된다', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final identity = await IdentityService.load();
     final svc = LocalRoomService();
     final session = await _setupSession(svc);
 
-    final room = await session.watch().first;
-    await tester.pumpWidget(_wrap(session, room, identity));
-    await tester.pump();
+    await tester.pumpWidget(_wrapLive(session, identity));
+    await tester.pumpAndSettle();
 
-    // 핵심 영역 라벨이 표시된다.
-    expect(find.textContaining('손패'), findsWidgets);
-    expect(find.textContaining('바닥'), findsWidgets);
-    expect(find.textContaining('먹은 패'), findsWidgets);
+    // 테이블에 카드 위젯(손패/바닥/더미)이 그려진다.
+    expect(find.byType(GoStopCardWidget), findsWidgets);
+    // 점수 표시(영역별 점수 칩)가 존재한다.
+    expect(find.textContaining('점'), findsWidgets);
   });
 
-  testWidgets('손패 카드를 탭하면 턴이 처리되어 상태가 갱신된다', (tester) async {
+  testWidgets('손패 카드를 탭하면 그 패가 손에서 빠진다(즉시 커밋)', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final identity = await IdentityService.load();
+    final svc = LocalRoomService();
+    // 온라인 세션(hotseat=false): 수를 둔 뒤 차례가 넘어가도 핫시트 가림막이
+    // 뜨지 않아 내 손패가 계속 보인다(낸 카드가 빠졌는지 위젯으로 확인 가능).
+    final session = await _setupSession(svc, hotseat: false);
+
+    await tester.pumpWidget(_wrapLive(session, identity));
+    await tester.pumpAndSettle();
+
+    // 손패 부채는 오른쪽 카드가 가장 위에 그려져 중앙이 완전히 노출된다.
+    // (가장 왼쪽 카드는 다른 카드에 덮여 '중앙' 탭이 빗나갈 수 있어 회피 —
+    //  실제 앱에선 노출된 부분을 탭하면 정상 동작한다.) 7월 열끗(id=24) 탭.
+    expect(find.byKey(const ValueKey('hand-24')), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('hand-24')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    // 낸 카드(24)는 손에서 사라지고(즉시 커밋 → 갱신 반영), 다른 손패(2)는 남는다.
+    expect(find.byKey(const ValueKey('hand-24')), findsNothing);
+    expect(find.byKey(const ValueKey('hand-2')), findsOneWidget);
+  });
+
+  testWidgets('수를 두면(StreamBuilder 경로) 카드 비행 애니메이션이 트리거된다', (tester) async {
+    // 회귀 방지: GameSession.watch() 허브 + didUpdateWidget 안무 트리거가
+    // 실제 갱신 흐름에서 동작하는지(=클릭해도 모션이 없던 버그) 검증한다.
     SharedPreferences.setMockInitialValues({});
     final identity = await IdentityService.load();
     final svc = LocalRoomService();
     final session = await _setupSession(svc);
 
-    var room = await session.watch().first;
-    await tester.pumpWidget(_wrap(session, room, identity));
+    await tester.pumpWidget(_wrapLive(session, identity));
     await tester.pumpAndSettle();
 
-    // 탭 가능한(onTap 있는) 손패 카드는 GestureDetector로 감싸진다.
-    final cards = find.byType(GestureDetector);
-    expect(cards, findsWidgets);
-    final card = cards.first;
-    await tester.ensureVisible(card);
-    await tester.pump();
-    await tester.tap(card, warnIfMissed: false);
-    await tester.pumpAndSettle();
+    // 연출 시작 전에는 비행 레이어가 없다.
+    expect(find.byKey(const ValueKey('gostop-flying')), findsNothing);
 
-    // submit이 반영되어 호스트 손패가 줄었는지 확인.
-    room = await session.watch().first;
-    final hostHand = ((room.state['hands'] as Map)['host'] as List).cast<int>();
-    expect(hostHand.length, lessThan(3));
+    // 1월 피(id=2) 를 내면 바닥 1월 매치 → 비행/캡처 + 더미 뒤집기 안무 시작.
+    await tester.tap(find.byKey(const ValueKey('hand-2')), warnIfMissed: false);
+    await tester.pump(); // submit → 스트림 갱신 → didUpdateWidget
+    await tester.pump(const Duration(milliseconds: 150)); // 안무 진행 중
+
+    // 비행 레이어가 화면에 떠 있어야 한다(모션이 실제로 재생됨).
+    expect(find.byKey(const ValueKey('gostop-flying')), findsOneWidget);
+
+    // 안무가 끝나면 비행 레이어는 사라진다.
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('gostop-flying')), findsNothing);
   });
 }

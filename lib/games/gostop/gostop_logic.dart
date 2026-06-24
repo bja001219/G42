@@ -22,6 +22,13 @@ import 'gostop_cards.dart';
 /// - `firstTurn`    : bool. 아직 첫 턴(첫뻑 판정용)인가.
 /// - `awaitingGoStop`: String. 고/스톱 판정 대기 중인 playerId('' = 없음).
 /// - `lastEvent`    : `String`. 직전 턴 이벤트 코드(아래 `ev*` 상수).
+/// - `moveSeq`      : int. 카드 수(playHandCard/playBomb)마다 +1. 비-카드수
+///   (declareGo/Stop/Shake)는 증가 없음. `_clone`/`createInitialState`에서 보존(기본 0).
+/// - `lastMove`     : `Map<String, dynamic>`(선택). 직전 카드 수의 안무 재생용 메타.
+///   모든 값은 평탄(스칼라 또는 `List<int>`) — List 안의 List 없음. 키: actor, kind,
+///   playedCard, bombCards, handCaptured, handToFloor, flippedCard, flipCaptured,
+///   flipToFloor, bonus, stolen, replenished, event, seq. 카드 수에서만 기록되고
+///   `_clone`은 보존하지 않는다(매 수 덮어씀; 비-카드수 경로엔 없음 → 재생 안 함).
 ///
 /// `Map<String, List<int>>` (playerId 키)는 허용. 금지는 List 안의 List.
 abstract class GoStopLogic {
@@ -100,6 +107,7 @@ abstract class GoStopLogic {
       'firstTurn': true,
       'awaitingGoStop': '',
       'lastEvent': evNone,
+      'moveSeq': 0,
     };
   }
 
@@ -318,6 +326,15 @@ abstract class GoStopLogic {
     var ppeokThisTurn = false;
     var ppeokMonth = -1;
 
+    // ---- lastMove 메타 추적용(동작에 영향 없음, 기록 전용) ----
+    // 손패 단계가 바닥에 놓은(또는 되돌린) 카드 / 뒤집기 단계가 먹은 카드 /
+    // 뒤집기 단계가 바닥에 놓은 카드 / 자동 수집 보너스패 / 뺏어온 피 id들.
+    final metaHandToFloor = <int>[];
+    final metaFlipCaptured = <int>[];
+    final metaFlipToFloor = <int>[];
+    final metaBonus = <int>[];
+    final metaStolen = <int>[];
+
     hand.remove(handCardId);
     final playedMonth = GoStopCards.monthOf(handCardId);
 
@@ -347,6 +364,7 @@ abstract class GoStopLogic {
       // 손패 카드를 바닥에 올려 3장이 쌓인 상태로 둔다. (같은 턴 더미가 4번째
       // 카드면 자뻑으로 4장 모두 가져간다 — 아래 더미 단계에서 처리.)
       floor.add(handCardId);
+      metaHandToFloor.add(handCardId);
       handMadePpeokFromFloor2 = true;
       event = evPpeok;
       ppeokThisTurn = true;
@@ -363,6 +381,7 @@ abstract class GoStopLogic {
     } else {
       // 바닥에 같은 달 없음 → 손패 카드를 바닥에 놓는다. (쪽 가능성.)
       floor.add(handCardId);
+      metaHandToFloor.add(handCardId);
       handPlacedOnFloor = true;
     }
 
@@ -374,6 +393,7 @@ abstract class GoStopLogic {
       if (GoStopCards.isBonus(top)) {
         // 보너스패: 즉시 내 피 더미로, 한 장 더 뽑는다.
         captured.add(top);
+        metaBonus.add(top);
         sawBonus = true;
         continue;
       }
@@ -394,8 +414,11 @@ abstract class GoStopLogic {
         for (final m in flipMatches) {
           floor.remove(m);
           captured.add(m);
+          metaFlipCaptured.add(m);
+          metaHandToFloor.remove(m); // 손패로 깔았던 카드가 회수됨.
         }
         captured.add(flipped);
+        metaFlipCaptured.add(flipped);
         event = evJappeok;
         ppeokThisTurn = false; // 해소되었으므로 뻑 카운트는 올리지 않는다.
         ppeokMonth = -1;
@@ -404,8 +427,10 @@ abstract class GoStopLogic {
         // 뻑: 손패로 잠정 먹은 쌍(2장) + 더미 같은 달 1장 = 3장 → 못 먹고 쌓임.
         // 손패가 먹었던 2장을 바닥으로 되돌리고, 뒤집은 카드도 바닥에 쌓는다.
         floor.addAll(handTaken);
+        metaHandToFloor.addAll(handTaken); // 손패 단계가 되돌려 바닥에 놓은 카드들.
         handTaken.clear();
         floor.add(flipped);
+        metaFlipToFloor.add(flipped);
         event = evPpeok;
         ppeokThisTurn = true;
         ppeokMonth = flipMonth;
@@ -416,6 +441,9 @@ abstract class GoStopLogic {
         floor.remove(handCardId);
         captured.add(handCardId);
         captured.add(flipped);
+        metaFlipCaptured.add(handCardId);
+        metaFlipCaptured.add(flipped);
+        metaHandToFloor.remove(handCardId); // 깔았던 손패가 쪽으로 회수됨.
         handPlacedOnFloor = false;
         event = evJjok;
         stealCount += 1;
@@ -423,9 +451,11 @@ abstract class GoStopLogic {
         // 바닥 같은 달 3장(기존 뻑 더미 등) + 뒤집은 1장 = 4장 모두 가져감.
         // (총통성 쓸기. 자뻑이 아니므로 보너스 없음 — 자뻑은 위에서 선처리.)
         captured.add(flipped);
+        metaFlipCaptured.add(flipped);
         for (final m in flipMatches) {
           floor.remove(m);
           captured.add(m);
+          metaFlipCaptured.add(m);
         }
         if (event == evNone || event == evEat) event = evEat;
       } else if (flipMatches.length == 2) {
@@ -437,6 +467,8 @@ abstract class GoStopLogic {
         floor.remove(pick);
         captured.add(flipped);
         captured.add(pick);
+        metaFlipCaptured.add(flipped);
+        metaFlipCaptured.add(pick);
         // 따닥: 손패가 한 쌍을 먹고, 더미가 (다른 달) 한 쌍을 또 먹음.
         if (handAteSinglePair && flipMonth != playedMonth) {
           event = evTtadak;
@@ -449,6 +481,8 @@ abstract class GoStopLogic {
         floor.remove(target);
         captured.add(flipped);
         captured.add(target);
+        metaFlipCaptured.add(flipped);
+        metaFlipCaptured.add(target);
         // 따닥: 손패가 한 쌍을 먹고, 더미가 (다른 달) 한 쌍을 또 먹음.
         if (handAteSinglePair && flipMonth != playedMonth) {
           event = evTtadak;
@@ -459,10 +493,13 @@ abstract class GoStopLogic {
       } else {
         // 더미 카드도 매칭 없음 → 바닥에 놓는다.
         floor.add(flipped);
+        metaFlipToFloor.add(flipped);
       }
     }
 
     // 손패로 잠정 먹은 카드 확정 적립(뻑이면 handTaken은 비어 있음).
+    // (기록 전용) 손패 단계가 확정한 먹은 카드들 — 뻑/깔림이면 빈 리스트.
+    final metaHandCaptured = List<int>.from(handTaken);
     captured.addAll(handTaken);
 
     if (event == evNone && sawBonus) event = evBonus;
@@ -489,7 +526,28 @@ abstract class GoStopLogic {
       final stolen = _stealJunk(opCaptured);
       if (stolen == null) break;
       captured.add(stolen);
+      metaStolen.add(stolen);
     }
+
+    // ---- moveSeq 증가 + lastMove 기록(안무 재생용 메타) ----
+    final nextSeq = ((s['moveSeq'] as num?)?.toInt() ?? 0) + 1;
+    s['moveSeq'] = nextSeq;
+    s['lastMove'] = <String, dynamic>{
+      'actor': pid,
+      'kind': 'play',
+      'playedCard': handCardId,
+      'bombCards': <int>[],
+      'handCaptured': metaHandCaptured,
+      'handToFloor': metaHandToFloor,
+      'flippedCard': flipped ?? -1,
+      'flipCaptured': metaFlipCaptured,
+      'flipToFloor': metaFlipToFloor,
+      'bonus': metaBonus,
+      'stolen': metaStolen,
+      'replenished': <int>[],
+      'event': event,
+      'seq': nextSeq,
+    };
 
     // ---- state 반영 ----
     _hands(s)[pid] = hand;
@@ -601,23 +659,30 @@ abstract class GoStopLogic {
     }
 
     // 손패 3장 + 바닥 1장 = 4장 먹기.
-    for (final c in handSame.take(3)) {
+    final bombCards = handSame.take(3).toList(); // (기록 전용) 낸 손패 3장.
+    for (final c in bombCards) {
       hand.remove(c);
       captured.add(c);
     }
     final fTarget = floorSame.first;
     floor.remove(fTarget);
     captured.add(fTarget);
+    // (기록 전용) 손패 단계가 먹은 4장 = 손패 3장 + 바닥 1장.
+    final metaHandCaptured = <int>[...bombCards, fTarget];
 
     // 손패 보충: 일반 턴(1장 소모) 대비 더 쓴 2장을 더미에서 채운다.
+    final metaReplenished = <int>[]; // (기록 전용) 보충된 손패 카드.
+    final metaBonus = <int>[]; // (기록 전용) 보충 중 자동 수집한 보너스패.
     var replenish = 2;
     while (replenish > 0 && stock.isNotEmpty) {
       final top = stock.removeAt(0);
       if (GoStopCards.isBonus(top)) {
         captured.add(top); // 보너스패는 손패가 아니라 피 더미로.
+        metaBonus.add(top);
         continue; // 보충 카운트는 그대로(보너스는 손패 보충에 안 셈).
       }
       hand.add(top);
+      metaReplenished.add(top);
       replenish -= 1;
     }
 
@@ -627,6 +692,26 @@ abstract class GoStopLogic {
     s['bomb'] = bomb;
     final stolen = _stealJunk(opCaptured);
     if (stolen != null) captured.add(stolen);
+
+    // ---- moveSeq 증가 + lastMove 기록(안무 재생용 메타) ----
+    final nextSeq = ((s['moveSeq'] as num?)?.toInt() ?? 0) + 1;
+    s['moveSeq'] = nextSeq;
+    s['lastMove'] = <String, dynamic>{
+      'actor': pid,
+      'kind': 'bomb',
+      'playedCard': bombCards.first, // 대표 1장(3장은 bombCards 참조).
+      'bombCards': bombCards,
+      'handCaptured': metaHandCaptured,
+      'handToFloor': <int>[],
+      'flippedCard': -1,
+      'flipCaptured': <int>[],
+      'flipToFloor': <int>[],
+      'bonus': metaBonus,
+      'stolen': stolen != null ? <int>[stolen] : <int>[],
+      'replenished': metaReplenished,
+      'event': evBomb,
+      'seq': nextSeq,
+    };
 
     _hands(s)[pid] = hand;
     s['floor'] = floor;
@@ -756,6 +841,9 @@ abstract class GoStopLogic {
       'firstTurn': state['firstTurn'] ?? false,
       'awaitingGoStop': state['awaitingGoStop'] ?? '',
       'lastEvent': state['lastEvent'] ?? evNone,
+      // moveSeq는 보존(없으면 0). lastMove는 의도적으로 미보존(매 카드수마다
+      // 덮어쓰고, declareGo/Stop/Shake 등 비-카드수 경로는 lastMove가 없는 게 맞다).
+      'moveSeq': (state['moveSeq'] as num?)?.toInt() ?? 0,
       if (state.containsKey('winner')) 'winner': state['winner'],
     };
   }

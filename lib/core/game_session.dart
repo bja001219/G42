@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'models/room.dart';
 import 'services/room_service.dart';
 
@@ -31,7 +33,52 @@ class GameSession {
     this.hotseat = false,
   });
 
-  Stream<Room> watch() => service.watchRoom(roomCode);
+  // 단일 소스 구독 허브 + 최신값(replay-1). 아래 watch() 설명 참고.
+  Room? _lastRoom;
+  StreamController<Room>? _hub;
+  StreamSubscription<Room>? _hubSub;
+
+  void _ensureHub() {
+    if (_hub != null) return;
+    final hub = StreamController<Room>.broadcast();
+    _hub = hub;
+    _hubSub = service
+        .watchRoom(roomCode)
+        .listen(
+          (r) {
+            _lastRoom = r;
+            if (!hub.isClosed) hub.add(r);
+          },
+          onError: (Object e, StackTrace st) {
+            if (!hub.isClosed) hub.addError(e, st);
+          },
+        );
+  }
+
+  /// 방 상태 스트림.
+  ///
+  /// 전송 계층(`watchRoom`)을 **한 번만** 구독(단일 소스)하고, 호출자에게는
+  /// "최신값 즉시(replay-1) + 이후 갱신" 스트림을 준다. 두 가지를 동시에 만족:
+  ///  1) 호출마다 현재 상태를 즉시 받는다(`watch().first` 가 바로 값을 받음) —
+  ///     기존 재방출 의미 유지.
+  ///  2) 여러 위젯(GameHostScreen + 각 게임 buildGame)이 watch() 를 각각 호출해도
+  ///     **소스 구독은 1개**다. 호출마다 새 소스 스트림을 만들면(특히 Firebase 의
+  ///     snapshots().map()) 바깥 위젯 리빌드 때 안쪽 StreamBuilder 가 새 스트림으로
+  ///     재구독·리셋되어 didUpdateWidget 기반 애니메이션 트리거가 깨진다.
+  Stream<Room> watch() async* {
+    _ensureHub();
+    final last = _lastRoom;
+    if (last != null) yield last;
+    yield* _hub!.stream;
+  }
+
+  /// 허브 정리(방을 떠날 때 호출 권장). 미호출 시에도 앱 종료까지 소스 1개만 유지.
+  void dispose() {
+    _hubSub?.cancel();
+    _hubSub = null;
+    _hub?.close();
+    _hub = null;
+  }
 
   /// 지금 내가 입력 가능한 차례인가. 핫시트면 항상 true.
   bool isMyTurn(Room room) => hotseat || room.turn == myPlayerId;
