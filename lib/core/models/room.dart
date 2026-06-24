@@ -116,7 +116,9 @@ class Room {
   /// (LocalRoomService에서 사용)
   Room applyPatch(Map<String, dynamic> patch) => Room(
     code: code,
-    gameId: gameId,
+    gameId: patch.containsKey('gameId')
+        ? (patch['gameId'] ?? '') as String
+        : gameId,
     hostId: hostId,
     status: patch.containsKey('status') ? _statusFrom(patch['status']) : status,
     players: patch.containsKey('players')

@@ -45,12 +45,16 @@ class HeadToHead {
     wins: m['wins'] == null
         ? <String, int>{}
         : Map<String, int>.from(
-            (m['wins'] as Map).map((k, v) => MapEntry(k as String, (v ?? 0) as int)),
+            (m['wins'] as Map).map(
+              (k, v) => MapEntry(k as String, (v ?? 0) as int),
+            ),
           ),
     scores: m['scores'] == null
         ? <String, int>{}
         : Map<String, int>.from(
-            (m['scores'] as Map).map((k, v) => MapEntry(k as String, (v ?? 0) as int)),
+            (m['scores'] as Map).map(
+              (k, v) => MapEntry(k as String, (v ?? 0) as int),
+            ),
           ),
     rounds: (m['rounds'] ?? 0) as int,
     nagari: (m['nagari'] ?? 0) as int,

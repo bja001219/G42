@@ -105,10 +105,25 @@ class StatsScreen extends StatelessWidget {
 
   Widget _statGrid(PlayerStats stats) {
     final cells = <Widget>[
-      _statCard('통산 점수', '${stats.totalScore}', G42Colors.accent, Icons.star_rounded),
-      _statCard('승', '${stats.wins}', G42Colors.good, Icons.emoji_events_rounded),
+      _statCard(
+        '통산 점수',
+        '${stats.totalScore}',
+        G42Colors.accent,
+        Icons.star_rounded,
+      ),
+      _statCard(
+        '승',
+        '${stats.wins}',
+        G42Colors.good,
+        Icons.emoji_events_rounded,
+      ),
       _statCard('패', '${stats.losses}', G42Colors.bad, Icons.close_rounded),
-      _statCard('나가리', '${stats.nagari}', G42Colors.warn, Icons.handshake_rounded),
+      _statCard(
+        '나가리',
+        '${stats.nagari}',
+        G42Colors.warn,
+        Icons.handshake_rounded,
+      ),
     ];
     return GridView.count(
       crossAxisCount: 2,

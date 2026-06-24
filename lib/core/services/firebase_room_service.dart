@@ -20,7 +20,7 @@ class FirebaseRoomService implements RoomService {
 
   @override
   Future<Room> createRoom({
-    required String gameId,
+    String gameId = '',
     required RoomPlayer host,
   }) async {
     // 코드 충돌 시 재시도.

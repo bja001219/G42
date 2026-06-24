@@ -35,9 +35,7 @@ class LocalScoreStore implements ScoreStore {
     final raw = p.getString(_statsKey(id));
     if (raw == null) return Future.value(null);
     return Future.value(
-      PlayerStats.fromMap(
-        Map<String, dynamic>.from(jsonDecode(raw) as Map),
-      ),
+      PlayerStats.fromMap(Map<String, dynamic>.from(jsonDecode(raw) as Map)),
     );
   }
 
@@ -49,7 +47,9 @@ class LocalScoreStore implements ScoreStore {
   HeadToHead? _readH2h(SharedPreferences p, String key) {
     final raw = p.getString(_h2hKey(key));
     if (raw == null) return null;
-    return HeadToHead.fromMap(Map<String, dynamic>.from(jsonDecode(raw) as Map));
+    return HeadToHead.fromMap(
+      Map<String, dynamic>.from(jsonDecode(raw) as Map),
+    );
   }
 
   Future<void> _writeH2h(SharedPreferences p, HeadToHead h) async {
@@ -70,7 +70,8 @@ class LocalScoreStore implements ScoreStore {
     final p = await _p();
 
     final curWinner =
-        await _readStats(p, winnerId) ?? PlayerStats.empty(winnerId, winnerName);
+        await _readStats(p, winnerId) ??
+        PlayerStats.empty(winnerId, winnerName);
     final curLoser =
         await _readStats(p, loserId) ?? PlayerStats.empty(loserId, loserName);
 
@@ -93,20 +94,13 @@ class LocalScoreStore implements ScoreStore {
     );
 
     final pairKey = HeadToHead.keyFor(winnerId, loserId);
-    final curH2h =
-        _readH2h(p, pairKey) ?? HeadToHead(pairKey: pairKey);
+    final curH2h = _readH2h(p, pairKey) ?? HeadToHead(pairKey: pairKey);
     await _writeH2h(
       p,
       HeadToHead(
         pairKey: pairKey,
-        wins: {
-          ...curH2h.wins,
-          winnerId: curH2h.winsOf(winnerId) + 1,
-        },
-        scores: {
-          ...curH2h.scores,
-          winnerId: curH2h.scoreOf(winnerId) + score,
-        },
+        wins: {...curH2h.wins, winnerId: curH2h.winsOf(winnerId) + 1},
+        scores: {...curH2h.scores, winnerId: curH2h.scoreOf(winnerId) + score},
         rounds: curH2h.rounds + 1,
         nagari: curH2h.nagari,
       ),
@@ -174,7 +168,8 @@ class LocalScoreStore implements ScoreStore {
     // 구독 시작 시 현재값을 비동기로 1회 emit.
     scheduleMicrotask(() async {
       final p = await _p();
-      final s = (await _readStats(p, playerId)) ??
+      final s =
+          (await _readStats(p, playerId)) ??
           PlayerStats.empty(playerId, fallbackName ?? '플레이어');
       ctrl.add(s);
     });

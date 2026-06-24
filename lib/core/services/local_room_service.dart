@@ -29,7 +29,7 @@ class LocalRoomService implements RoomService {
 
   @override
   Future<Room> createRoom({
-    required String gameId,
+    String gameId = '',
     required RoomPlayer host,
   }) async {
     String code;

@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'core/services/identity_service.dart';
 import 'core/services/room_service.dart';
 import 'core/services/score_store.dart';
-import 'ui/lobby_screen.dart';
+import 'ui/home_screen.dart';
+import 'ui/login_screen.dart';
 import 'theme.dart';
 
 /// 앱 루트.
@@ -32,7 +33,8 @@ class G42App extends StatelessWidget {
         title: 'G42',
         debugShowCheckedModeBanner: false,
         theme: g42Theme(),
-        home: const LobbyScreen(),
+        // 최초 실행(닉네임 미확정)이면 로그인 화면, 아니면 홈으로.
+        home: identity.nameConfirmed ? const HomeScreen() : const LoginScreen(),
       ),
     );
   }

@@ -23,7 +23,10 @@ abstract class RoomService {
   String get label;
 
   /// 방 생성. status=waiting, players=[host]로 시작.
-  Future<Room> createRoom({required String gameId, required RoomPlayer host});
+  ///
+  /// [gameId]는 선택적이다(기본 ""). 새 흐름에서는 방을 먼저 만들고,
+  /// 대기실에서 방장이 게임을 고른 뒤 gameId를 채운다.
+  Future<Room> createRoom({String gameId = '', required RoomPlayer host});
 
   /// 코드로 방 참가.
   Future<JoinResult> joinRoom({
