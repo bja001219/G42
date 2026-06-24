@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'app.dart';
+import 'firebase_options.dart';
 import 'core/services/identity_service.dart';
 import 'core/services/room_service.dart';
 import 'core/services/firebase_room_service.dart';
@@ -17,10 +18,12 @@ Future<void> main() async {
   // 예외가 나는데, 그 경우 로컬(동일 기기 핫시트) 모드로 폴백한다.
   bool firebaseReady = false;
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     firebaseReady = true;
   } catch (e) {
-    debugPrint('Firebase 미설정 → 로컬 모드로 실행합니다: $e');
+    debugPrint('Firebase 초기화 실패 → 로컬 모드로 폴백합니다: $e');
   }
 
   final identity = await IdentityService.load();

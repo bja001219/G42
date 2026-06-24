@@ -46,3 +46,6 @@ app.*.map.json
 
 # OMC orchestration state (tooling, not project)
 .omc/
+
+# Firebase 배포 캐시 (설정 파일은 커밋, 캐시는 제외)
+.firebase/

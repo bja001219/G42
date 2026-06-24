@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "670967152439",
+    "project_id": "gfor2-e681d",
+    "storage_bucket": "gfor2-e681d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:670967152439:android:7ed8826919221b96a0e4b2",
+        "android_client_info": {
+          "package_name": "com.malgnst.g42"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYObdjot2341BtJh_273ItHl8TZvaFmGs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
