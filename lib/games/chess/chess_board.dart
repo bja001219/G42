@@ -379,24 +379,7 @@ class _ChessBoardState extends State<ChessBoard> {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    if (piece != '.')
-                      Text(
-                        _glyph(piece),
-                        style: TextStyle(
-                          fontSize: cellSize * 0.72,
-                          height: 1.0,
-                          color: _isWhitePiece(piece)
-                              ? Colors.white
-                              : const Color(0xFF15151F),
-                          shadows: const [
-                            Shadow(
-                              blurRadius: 2,
-                              color: Colors.black38,
-                              offset: Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                      ),
+                    if (piece != '.') _pieceGlyph(piece, cellSize * 0.72),
                     if (isTarget)
                       Container(
                         width: piece == '.' ? cellSize * 0.30 : cellSize * 0.9,
@@ -462,17 +445,7 @@ class _ChessBoardState extends State<ChessBoard> {
           Expanded(
             child: Wrap(
               spacing: 1,
-              children: pieces
-                  .map(
-                    (p) => Text(
-                      _glyph(p),
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: white ? Colors.white70 : const Color(0xFF15151F),
-                      ),
-                    ),
-                  )
-                  .toList(),
+              children: pieces.map((p) => _pieceGlyph(p, 18)).toList(),
             ),
           ),
         ],
@@ -563,28 +536,72 @@ class _ChessBoardState extends State<ChessBoard> {
 
   static bool _isWhitePiece(String p) => p != '.' && p == p.toUpperCase();
 
+  /// 백은 외곽선(아웃라인) 글리프, 흑은 채워진(솔리드) 글리프를 써서
+  /// 색뿐 아니라 '모양'으로도 흑백을 구분한다.
   static String _glyph(String p) {
     switch (p) {
       case 'P':
+        return '♙';
       case 'p':
-        return '♟'; // ♟ (양쪽 모두 색으로 구분)
+        return '♟';
       case 'N':
+        return '♘';
       case 'n':
-        return '♞'; // ♞
+        return '♞';
       case 'B':
+        return '♗';
       case 'b':
-        return '♝'; // ♝
+        return '♝';
       case 'R':
+        return '♖';
       case 'r':
-        return '♜'; // ♜
+        return '♜';
       case 'Q':
+        return '♕';
       case 'q':
-        return '♛'; // ♛
+        return '♛';
       case 'K':
+        return '♔';
       case 'k':
-        return '♚'; // ♚
+        return '♚';
       default:
         return '';
     }
+  }
+
+  /// 말 글리프를 외곽선(stroke) + 채움(fill) 2겹으로 그려 어떤 칸 위에서도
+  /// 선명하게 보이고 흑백 대비가 확실하게 한다.
+  static Widget _pieceGlyph(String piece, double size) {
+    final glyph = _glyph(piece);
+    if (glyph.isEmpty) return const SizedBox.shrink();
+
+    final isWhite = _isWhitePiece(piece);
+    final fill = isWhite ? Colors.white : const Color(0xFF12121A);
+    final outline = isWhite ? const Color(0xFF12121A) : Colors.white;
+    final strokeWidth = (size * 0.045).clamp(1.2, 6.0);
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // 외곽선 (대비색 stroke)
+        Text(
+          glyph,
+          style: TextStyle(
+            fontSize: size,
+            height: 1.0,
+            foreground: Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = strokeWidth
+              ..strokeJoin = StrokeJoin.round
+              ..color = outline,
+          ),
+        ),
+        // 채움
+        Text(
+          glyph,
+          style: TextStyle(fontSize: size, height: 1.0, color: fill),
+        ),
+      ],
+    );
   }
 }
