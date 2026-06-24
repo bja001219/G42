@@ -15,7 +15,7 @@ abstract class BoggleLogic {
   static const int defaultSize = 4;
 
   /// 지원하는 격자 크기들.
-  static const List<int> supportedSizes = <int>[4, 5, 6];
+  static const List<int> supportedSizes = <int>[4, 5, 6, 10];
 
   /// 보드 전체 칸 수.
   static int cellCount(int size) => size * size;
@@ -29,8 +29,12 @@ abstract class BoggleLogic {
         return 120;
       case 6:
         return 150;
+      case 8:
+        return 180;
+      case 10:
+        return 210;
       default:
-        return 90 + (size - 4) * 30;
+        return (90 + (size - 4) * 30).clamp(60, 300);
     }
   }
 
@@ -114,18 +118,57 @@ abstract class BoggleLogic {
     'eoosuw',
   ];
 
-  /// 주사위를 섞어 보드 문자열(size*size자)을 만든다.
+  /// 주사위 세트가 없는 큰 격자(예: 10x10)를 채울 때 쓰는 영문 빈도 '가방'.
+  /// 자연 영어 빈도에 가깝게(모음 비중 ~40%) 글자를 빈도만큼 반복해 담았다.
+  /// 'q'는 드물게 넣고 매칭 시 'qu'로 확장된다.
+  static const String _letterBag =
+      'eeeeeeeeeeee' // e×12
+      'ttttttttt' // t×9
+      'aaaaaaaa' // a×8
+      'oooooooo' // o×8
+      'iiiiiii' // i×7
+      'nnnnnnn' // n×7
+      'ssssss' // s×6
+      'hhhhhh' // h×6
+      'rrrrrr' // r×6
+      'dddd' // d×4
+      'llll' // l×4
+      'uuuu' // u×4
+      'ccc' // c×3
+      'mmm' // m×3
+      'ggg' // g×3
+      'ppp' // p×3
+      'bb' // b×2
+      'ff' // f×2
+      'ww' // w×2
+      'yy' // y×2
+      'v' // v×1
+      'k' // k×1
+      'j' // j×1
+      'x' // x×1
+      'q' // q×1 (→ qu)
+      'z'; // z×1
+
+  /// 보드 문자열(size*size자)을 만든다.
   ///
-  /// 'q' 면은 'qu'를 의미하지만, 단일 칸 인코딩을 위해 'q' 한 글자로 저장하고
+  /// - 주사위 세트가 있는 크기(4·5·6)는 표준 주사위를 섞어 한 면씩 뽑는다.
+  /// - 그 외 큰 크기(예: 10x10)는 빈도 가방에서 칸 수만큼 추출한다.
+  ///
+  /// 'q' 면/글자는 'qu'를 의미하지만, 단일 칸 인코딩을 위해 'q' 한 글자로 저장하고
   /// 단어 매칭 시 'qu'로 확장한다(아래 [letterAt] 참고).
   static String randomBoard(int size, Random rng) {
-    final dice = List<String>.from(
-      diceBySize[size] ?? diceBySize[defaultSize]!,
-    );
-    dice.shuffle(rng);
+    final cells = cellCount(size);
     final buf = StringBuffer();
-    for (final d in dice) {
-      buf.write(d[rng.nextInt(d.length)]);
+    final dice = diceBySize[size];
+    if (dice != null) {
+      final shuffled = List<String>.from(dice)..shuffle(rng);
+      for (final d in shuffled) {
+        buf.write(d[rng.nextInt(d.length)]);
+      }
+    } else {
+      for (var i = 0; i < cells; i++) {
+        buf.write(_letterBag[rng.nextInt(_letterBag.length)]);
+      }
     }
     return buf.toString();
   }

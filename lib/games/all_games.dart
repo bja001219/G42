@@ -19,12 +19,14 @@ final List<GameDefinition> builtInGames = <GameDefinition>[
   ReactionGame(),
   BlackjackGame(),
   OneCardGame(),
-  // 보글: 4x4(클래식)·5x5(Big Boggle)·6x6 + 한글판도 동일하게 3종.
+  // 보글: 4x4(클래식)·5x5(Big Boggle)·6x6·10x10(큰판) + 한글판도 동일하게 4종.
   const BoggleGame(size: 4),
   const BoggleGame(size: 5),
   const BoggleGame(size: 6),
+  const BoggleGame(size: 10),
   const BoggleKoGame(size: 4),
   const BoggleKoGame(size: 5),
   const BoggleKoGame(size: 6),
+  const BoggleKoGame(size: 10),
   GoStopGame(),
 ];

@@ -223,4 +223,39 @@ void main() {
       expect(BoggleLogic.canFormWord(5, g, 'help'), false); // 'p' 없음
     });
   });
+
+  group('10x10 큰 판 (주사위 없는 크기 → 빈도 채움)', () {
+    test('100자 소문자', () {
+      final gen = BoggleLogic.randomBoard(10, Random(5));
+      expect(gen.length, 100);
+      expect(RegExp(r'^[a-z]{100}$').hasMatch(gen), true);
+    });
+
+    test('같은 시드는 같은 보드(동일판 보장)', () {
+      expect(
+        BoggleLogic.randomBoard(10, Random(99)),
+        BoggleLogic.randomBoard(10, Random(99)),
+      );
+    });
+
+    test('durationFor(10) = 210초', () {
+      expect(BoggleLogic.cellCount(10), 100);
+      expect(BoggleLogic.durationFor(10), 210);
+    });
+
+    test('10x10 인접은 행 경계를 넘지 않는다', () {
+      // index 9(행0 끝)와 10(행1 시작)은 다른 행 → 비인접.
+      expect(BoggleLogic.adjacent(10, 9, 10), false);
+      expect(BoggleLogic.adjacent(10, 0, 1), true); // 같은 행
+      expect(BoggleLogic.adjacent(10, 0, 10), true); // 바로 아래
+      expect(BoggleLogic.adjacent(10, 0, 11), true); // 대각
+    });
+
+    test('빈도 채움 보드에서도 인접 단어를 만들 수 있다', () {
+      // 첫 행에 'water'를 깔고 나머지는 'x'로 채운 10x10.
+      final g = 'water${'x' * 95}';
+      expect(g.length, 100);
+      expect(BoggleLogic.canFormWord(10, g, 'water'), true); // 0-1-2-3-4
+    });
+  });
 }

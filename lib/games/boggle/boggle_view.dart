@@ -463,21 +463,36 @@ class _BoggleViewState extends State<BoggleView> {
   double get _cellSpacing => switch (widget.rules.size) {
     4 => 8,
     5 => 6,
-    _ => 5,
+    6 => 5,
+    <= 8 => 4,
+    _ => 3, // 10x10+
   };
 
   /// 글자 기준 폰트 크기: 판이 클수록 작게. (FittedBox가 추가로 줄여 맞춘다.)
   double get _cellFontSize => switch (widget.rules.size) {
     4 => 26,
     5 => 22,
-    _ => 18,
+    6 => 18,
+    <= 8 => 15,
+    _ => 13, // 10x10+
   };
 
   /// 경로 순서 배지 폰트.
-  double get _orderFontSize => widget.rules.size >= 6 ? 9 : 11;
+  double get _orderFontSize => switch (widget.rules.size) {
+    >= 8 => 8,
+    6 || 7 => 9,
+    _ => 11,
+  };
 
   /// 칸 모서리 둥글기.
-  double get _cellRadius => widget.rules.size >= 6 ? 9 : 12;
+  double get _cellRadius => switch (widget.rules.size) {
+    >= 8 => 6,
+    6 || 7 => 9,
+    _ => 12,
+  };
+
+  /// 칸 글자 안쪽 여백: 큰 판은 더 좁게.
+  double get _cellPadding => widget.rules.size >= 8 ? 2 : 4;
 
   Widget _board() {
     return AspectRatio(
@@ -526,7 +541,7 @@ class _BoggleViewState extends State<BoggleView> {
           children: [
             Center(
               child: Padding(
-                padding: const EdgeInsets.all(4),
+                padding: EdgeInsets.all(_cellPadding),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(

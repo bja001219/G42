@@ -85,4 +85,21 @@ void main() {
       }
     }
   });
+
+  test('randomBoard 10x10: 100칸 전부 한글 + 단어 여러 개 심김', () {
+    for (final seed in [1, 7]) {
+      final b = KoBoggleLogic.randomBoard(10, Random(seed));
+      expect(b.length, 100, reason: 'seed=$seed');
+      expect(
+        b.runes.every((r) => r >= 0xAC00 && r <= 0xD7A3),
+        true,
+        reason: '모든 칸이 한글이어야 함 (seed=$seed)',
+      );
+      // 큰 판은 단어를 많이 심으므로(약 cells/4 ≈ 25개) 최소 1개는 반드시 찾아져야 한다.
+      final hasWord = koBoggleWords.any(
+        (w) => KoBoggleLogic.canFormWord(10, b, w),
+      );
+      expect(hasWord, true, reason: '심은 단어가 찾아져야 함 (seed=$seed)');
+    }
+  });
 }
