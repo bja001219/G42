@@ -248,7 +248,7 @@ class _BoggleViewState extends State<BoggleView> {
         _path.removeRange(at + 1, _path.length);
         return;
       }
-      if (_path.isEmpty || BoggleLogic.adjacent(_path.last, index)) {
+      if (_path.isEmpty || widget.rules.adjacent(_path.last, index)) {
         _path.add(index);
       } else {
         // 인접하지 않은 칸 → 새 경로 시작.
@@ -266,7 +266,7 @@ class _BoggleViewState extends State<BoggleView> {
     final me = _me;
     final word = widget.rules.wordFromPath(_grid, _path);
 
-    if (!BoggleLogic.isValidPath(_path)) {
+    if (!widget.rules.isValidPath(_path)) {
       _toast('잘못된 경로입니다');
       return;
     }
@@ -348,7 +348,7 @@ class _BoggleViewState extends State<BoggleView> {
           const SizedBox(height: 12),
           _currentWordBar(),
           const SizedBox(height: 12),
-          _grid.length == BoggleLogic.cellCount
+          _grid.length == widget.rules.cellCount
               ? _board()
               : const SizedBox.shrink(),
           const SizedBox(height: 12),
@@ -459,17 +459,37 @@ class _BoggleViewState extends State<BoggleView> {
 
   // ---- 보드 -----------------------------------------------------------------
 
+  /// 칸 사이 간격: 판이 클수록 좁게(칸을 최대한 크게).
+  double get _cellSpacing => switch (widget.rules.size) {
+    4 => 8,
+    5 => 6,
+    _ => 5,
+  };
+
+  /// 글자 기준 폰트 크기: 판이 클수록 작게. (FittedBox가 추가로 줄여 맞춘다.)
+  double get _cellFontSize => switch (widget.rules.size) {
+    4 => 26,
+    5 => 22,
+    _ => 18,
+  };
+
+  /// 경로 순서 배지 폰트.
+  double get _orderFontSize => widget.rules.size >= 6 ? 9 : 11;
+
+  /// 칸 모서리 둥글기.
+  double get _cellRadius => widget.rules.size >= 6 ? 9 : 12;
+
   Widget _board() {
     return AspectRatio(
       aspectRatio: 1,
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: BoggleLogic.size,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: widget.rules.size,
+          mainAxisSpacing: _cellSpacing,
+          crossAxisSpacing: _cellSpacing,
         ),
-        itemCount: BoggleLogic.cellCount,
+        itemCount: widget.rules.cellCount,
         itemBuilder: (context, index) => _cell(index),
       ),
     );
@@ -499,18 +519,24 @@ class _BoggleViewState extends State<BoggleView> {
       child: Container(
         decoration: BoxDecoration(
           color: over ? G42Colors.surface : bg,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(_cellRadius),
           border: Border.all(color: border, width: isLast ? 2.5 : 1.5),
         ),
         child: Stack(
           children: [
             Center(
-              child: Text(
-                widget.rules.displayAt(_grid, index),
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  color: over ? Colors.white38 : Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    widget.rules.displayAt(_grid, index),
+                    style: TextStyle(
+                      fontSize: _cellFontSize,
+                      fontWeight: FontWeight.w900,
+                      color: over ? Colors.white38 : Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -520,8 +546,8 @@ class _BoggleViewState extends State<BoggleView> {
                 left: 6,
                 child: Text(
                   '$order',
-                  style: const TextStyle(
-                    fontSize: 11,
+                  style: TextStyle(
+                    fontSize: _orderFontSize,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),

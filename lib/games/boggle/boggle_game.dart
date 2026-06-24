@@ -5,17 +5,26 @@ import 'package:flutter/material.dart';
 import '../../core/game_definition.dart';
 import '../../core/game_session.dart';
 import '../../core/models/room.dart';
-import 'boggle_logic.dart';
 import 'boggle_rules.dart';
 import 'boggle_view.dart';
 
-/// 보글: 같은 4x4 글자판에서 제한시간 동안 인접 경로로 단어를 많이 찾는 쪽이 승리.
+/// 보글: 같은 NxN 글자판에서 제한시간 동안 인접 경로로 단어를 많이 찾는 쪽이 승리.
+///
+/// [size]로 4x4(클래식)·5x5(Big Boggle)·6x6 모드를 만든다.
 class BoggleGame extends GameDefinition {
-  @override
-  String get id => 'boggle';
+  /// 격자 한 변(4·5·6).
+  final int size;
+
+  const BoggleGame({this.size = 4});
+
+  EnglishBoggleRules get rules => EnglishBoggleRules(size: size);
 
   @override
-  String get title => '보글';
+  // 4x4는 기존 id 'boggle' 유지(하위 호환), 그 외는 'boggle5'/'boggle6'.
+  String get id => size == 4 ? 'boggle' : 'boggle$size';
+
+  @override
+  String get title => '보글 $size×$size';
 
   @override
   String get subtitle => '같은 판에서 단어 많이 찾기';
@@ -28,7 +37,7 @@ class BoggleGame extends GameDefinition {
 
   @override
   Map<String, dynamic> createInitialState(List<String> playerIds) {
-    final grid = BoggleLogic.randomBoard(Random());
+    final grid = rules.randomBoard(Random());
     final found = <String, dynamic>{};
     final scores = <String, dynamic>{};
     final done = <String, dynamic>{};
@@ -62,7 +71,7 @@ class BoggleGame extends GameDefinition {
           room: room,
           createInitialState: createInitialState,
           firstTurn: firstTurn,
-          rules: const EnglishBoggleRules(),
+          rules: rules,
         );
       },
     );

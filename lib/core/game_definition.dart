@@ -9,6 +9,9 @@ import 'game_session.dart';
 /// 2. `lib/games/all_games.dart`의 리스트에 `XxxGame()`을 한 줄 추가하면 끝.
 ///    → 로비에 자동으로 카드가 늘어난다.
 abstract class GameDefinition {
+  /// const 하위 클래스(예: 크기별 보글 모드)를 허용하기 위한 const 생성자.
+  const GameDefinition();
+
   /// 고유 식별자 (예: 'chess'). 방의 gameId로 저장된다.
   String get id;
 
