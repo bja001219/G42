@@ -7,6 +7,7 @@ import '../app.dart';
 import '../core/game_definition.dart';
 import '../core/game_registry.dart';
 import '../core/game_session.dart';
+import '../core/models/head_to_head.dart';
 import '../core/models/room.dart';
 import '../core/services/room_service.dart';
 import '../theme.dart';
@@ -266,6 +267,41 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
     });
   }
 
+  // ---- 전적 초기화 핸드셰이크(accept 와 별개 state 키: resetBy/resetGameId) ----
+
+  /// 전적 초기화 제안: 기존 state 보존 후 resetBy/resetGameId 표식만 추가.
+  Future<void> _proposeReset(String gameId) async {
+    final room = _room;
+    if (room == null) return;
+    final newState = Map<String, dynamic>.from(room.state);
+    newState['resetBy'] = _myId;
+    newState['resetGameId'] = gameId;
+    await _service.updateRoom(widget.code, {'state': newState});
+  }
+
+  /// 초기화 수락(상대): 수락한 클라이언트가 resetHeadToHead 를 1회 호출한 뒤
+  /// reset 표식을 제거(중복 방지). 통산 profile 은 건드리지 않는다.
+  Future<void> _acceptReset(Room room) async {
+    final gameId = room.state['resetGameId'] as String?;
+    final opp = room.opponentOf(_myId);
+    if (gameId != null && gameId.isNotEmpty && opp != null) {
+      await AppServices.of(
+        context,
+      ).scoreStore.resetHeadToHead(_myId, opp.id, gameId);
+    }
+    await _clearResetMarks(room);
+  }
+
+  /// 초기화 거절/취소: 표식만 제거.
+  Future<void> _declineReset(Room room) => _clearResetMarks(room);
+
+  Future<void> _clearResetMarks(Room room) async {
+    final newState = Map<String, dynamic>.from(room.state)
+      ..remove('resetBy')
+      ..remove('resetGameId');
+    await _service.updateRoom(widget.code, {'state': newState});
+  }
+
   // ---- 방 나가기 ----
   Future<void> _leave() async {
     final navigator = Navigator.of(context);
@@ -507,6 +543,9 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
             ),
           ),
         ),
+        // 제안자(수락 대기 중): 제안한 게임의 head-to-head + 전적 초기화.
+        if (waitingAccept && room.gameId.isNotEmpty)
+          SliverToBoxAdapter(child: _h2hPanel(room, room.gameId)),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           sliver: SliverGrid(
@@ -606,7 +645,10 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
+            // 이 게임의 head-to-head + 전적 초기화 핸드셰이크.
+            _h2hPanel(room, room.gameId),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -655,6 +697,182 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
               fontWeight: FontWeight.w700,
               letterSpacing: 2,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- 게임이 제안/선택된 상태에서의 head-to-head + 전적 초기화 핸드셰이크 ----
+  ///
+  /// [gameId] 의 (나, 상대) 승판수를 "나 X : 상대 Y" 로 보여주고, 옆에 "전적 초기화"
+  /// 버튼을 둔다. 누군가 초기화를 제안하면(state.resetBy) 상대 화면에 수락/거절 행이
+  /// 뜬다(내가 제안자면 "수락 대기 중" 안내).
+  Widget _h2hPanel(Room room, String gameId) {
+    final opp = room.opponentOf(_myId);
+    if (opp == null || gameId.isEmpty) return const SizedBox.shrink();
+    final gameTitle = GameRegistry.byId(gameId)?.title ?? '게임';
+    final resetBy = room.state['resetBy'] as String?;
+    final resetGameId = room.state['resetGameId'] as String?;
+    final hasReset =
+        resetBy != null && resetBy.isNotEmpty && resetGameId == gameId;
+    final iProposedReset = hasReset && resetBy == _myId;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: G42Colors.surface,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.history_rounded,
+                size: 16,
+                color: Colors.white38,
+              ),
+              const SizedBox(width: 8),
+              StreamBuilder<HeadToHead?>(
+                stream: AppServices.of(
+                  context,
+                ).scoreStore.watchHeadToHeadForGame(_myId, opp.id, gameId),
+                builder: (context, snap) {
+                  final h2h = snap.data;
+                  final myWins = h2h?.winsOf(_myId) ?? 0;
+                  final oppWins = h2h?.winsOf(opp.id) ?? 0;
+                  return _h2hScoreText(myWins, oppWins);
+                },
+              ),
+              const Spacer(),
+              if (!hasReset)
+                TextButton.icon(
+                  onPressed: () => _proposeReset(gameId),
+                  icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                  label: const Text('전적 초기화'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: G42Colors.warn,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+            ],
+          ),
+          if (hasReset)
+            _resetHandshakeRow(room, gameTitle, iProposedReset, opp),
+        ],
+      ),
+    );
+  }
+
+  Widget _h2hScoreText(int myWins, int oppWins) {
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(fontSize: 14),
+        children: [
+          const TextSpan(
+            text: '나 ',
+            style: TextStyle(color: Colors.white54),
+          ),
+          TextSpan(
+            text: '$myWins',
+            style: const TextStyle(
+              color: G42Colors.good,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const TextSpan(
+            text: ' : ',
+            style: TextStyle(color: Colors.white38),
+          ),
+          TextSpan(
+            text: '$oppWins',
+            style: const TextStyle(
+              color: G42Colors.bad,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const TextSpan(
+            text: ' 상대',
+            style: TextStyle(color: Colors.white54),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _resetHandshakeRow(
+    Room room,
+    String gameTitle,
+    bool iProposed,
+    RoomPlayer opp,
+  ) {
+    if (iProposed) {
+      // 내가 제안자: 상대 수락 대기 중(취소 가능).
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '상대 수락 대기 중 (전적 초기화 제안함)',
+                style: TextStyle(color: G42Colors.warn, fontSize: 12),
+              ),
+            ),
+            TextButton(
+              onPressed: () => _declineReset(room),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white54,
+                visualDensity: VisualDensity.compact,
+              ),
+              child: const Text('취소'),
+            ),
+          ],
+        ),
+      );
+    }
+    // 상대가 제안: 수락/거절.
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${opp.name}님이 $gameTitle 전적 초기화를 제안했어요',
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _declineReset(room),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white24),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('거절'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => _acceptReset(room),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: G42Colors.warn,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('초기화 수락'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

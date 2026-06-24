@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../app.dart';
 import '../../core/game_session.dart';
 import '../../core/models/room.dart';
 import '../../theme.dart';
@@ -49,7 +48,6 @@ class _GoStopViewState extends State<GoStopView> with TickerProviderStateMixin {
   bool _curtain = false;
   String? _lastActor;
   bool _autoActionInFlight = false;
-  bool _recordInFlight = false;
 
   // ── 표시 상태(displayed) — 연출 동안 권위 상태와 분리 ──
   /// 현재 화면에 그려지는 상태(연출 중엔 직전 수 기준으로 모핑).
@@ -447,11 +445,10 @@ class _GoStopViewState extends State<GoStopView> with TickerProviderStateMixin {
   }
 
   void _maybeAutoFinalize() {
-    // 종료 상태는 항상 스냅 상태(연출 중 아님)이므로 기록 경로는 게이트하지 않는다.
-    if (widget.room.status == RoomStatus.finished) {
-      _recordIfNeeded();
-      return;
-    }
+    // 라운드 종료(승부/나가리/총통/3뻑) 전적 기록은 GameHostScreen 이 게임 무관하게
+    // 중앙에서 1회 수행한다. 여기서는 결과 state(winnerId/roundScore/nagari)만 세팅하고
+    // 기록은 하지 않는다(중복 방지).
+    if (widget.room.status == RoomStatus.finished) return;
     if (_autoActionInFlight) return;
     // H1: 진행 중 종료 전이(총통/3뻑/나가리)는 연출이 끝난 뒤 처리한다.
     // 연출 도중 finished state 를 submit 하면 진행 중인 한 수 연출이 끊긴다.
@@ -495,72 +492,6 @@ class _GoStopViewState extends State<GoStopView> with TickerProviderStateMixin {
       }
       return;
     }
-  }
-
-  Future<void> _recordIfNeeded() async {
-    if (_state['recorded'] == true) return;
-    if (_recordInFlight) return;
-    final isNagari = _state['nagari'] == true || widget.room.winner == 'draw';
-
-    if (isNagari) {
-      final ids = widget.room.playerIds;
-      if (ids.length < 2) return;
-      final host = ids.first;
-      final iAmRecorder =
-          widget.session.hotseat || widget.session.myPlayerId == host;
-      if (!iAmRecorder) return;
-      final aId = ids[0];
-      final bId = ids[1];
-      _recordInFlight = true;
-      try {
-        await AppServices.of(context).scoreStore.recordNagari(
-          idA: aId,
-          nameA: _nameOf(aId),
-          idB: bId,
-          nameB: _nameOf(bId),
-        );
-        if (!mounted) return;
-        await _markRecorded();
-      } catch (_) {
-        // 기록 실패: recorded 미설정 → 다음 프레임 재시도.
-      } finally {
-        _recordInFlight = false;
-      }
-      return;
-    }
-
-    final winnerId = (_state['winnerId'] as String?) ?? widget.room.winner;
-    if (winnerId == null || winnerId.isEmpty) return;
-    final loserId = widget.room.opponentOf(winnerId)?.id;
-    if (loserId == null) return;
-
-    final iAmRecorder =
-        widget.session.hotseat || widget.session.myPlayerId == winnerId;
-    if (!iAmRecorder) return;
-
-    final score = (_state['roundScore'] as num?)?.toInt() ?? 0;
-    _recordInFlight = true;
-    try {
-      await AppServices.of(context).scoreStore.recordRound(
-        winnerId: winnerId,
-        winnerName: _nameOf(winnerId),
-        loserId: loserId,
-        loserName: _nameOf(loserId),
-        score: score,
-      );
-      if (!mounted) return;
-      await _markRecorded();
-    } catch (_) {
-      // 기록 실패: recorded 미설정 → 다음 프레임 재시도.
-    } finally {
-      _recordInFlight = false;
-    }
-  }
-
-  Future<void> _markRecorded() {
-    final state = _freshState();
-    state['recorded'] = true;
-    return widget.session.submit(state);
   }
 
   // ====================================================================
@@ -1643,7 +1574,6 @@ class _GoStopViewState extends State<GoStopView> with TickerProviderStateMixin {
       _curtain = false;
       _lastActor = null;
       _autoActionInFlight = false;
-      _recordInFlight = false;
       _animating = false;
       _currentMove = null;
       _callout = null;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../core/game_registry.dart';
 import '../core/game_session.dart';
+import '../core/models/head_to_head.dart';
 import '../core/models/room.dart';
 import '../theme.dart';
 
@@ -28,10 +29,90 @@ class _GameHostScreenState extends State<GameHostScreen> {
   /// 게임 시작 시각(이 화면 진입 시점 = status==playing 진입). 30초 기권 기준.
   late final DateTime _startedAt;
 
+  /// 중앙 전적 기록 in-flight 가드(중복 기록 방지). recorded 표식이 전파되기
+  /// 전에 다음 프레임이 또 기록을 시도하는 것을 막는다.
+  bool _recordInFlight = false;
+
   @override
   void initState() {
     super.initState();
     _startedAt = DateTime.now();
+  }
+
+  /// 라운드 종료 시 전적을 게임 무관하게 중앙에서 1회 기록한다(§B).
+  ///
+  /// 트리거 조건: status==finished && winner!=null && room.state["recorded"]!=true.
+  /// 처리 주체(중복 방지):
+  ///   - 승부(winner != "draw"): 승자 클라이언트(myPlayerId == winner)만 기록.
+  ///   - 무승부(winner == "draw"): 호스트(hostId) 클라이언트가 recordNagari.
+  /// 기록 성공 시 room.state["recorded"]=true 로 갱신(기존 state 보존)하여 잠근다.
+  Future<void> _maybeRecordRound(Room room) async {
+    if (_recordInFlight) return;
+    if (room.status != RoomStatus.finished) return;
+    if (room.state['recorded'] == true) return;
+    final winner = room.winner;
+    if (winner == null || winner.isEmpty) return;
+    // 상대 퇴장으로 한 명만 남은 방은 기록 대상이 아니다(기권은 _leave 에서 처리).
+    if (!room.isFull) return;
+
+    final services = AppServices.of(context);
+    final me = session.myPlayerId;
+    final ids = room.playerIds;
+    if (ids.length < 2) return;
+
+    if (winner == 'draw') {
+      // 무승부: 호스트만 기록.
+      if (me != room.hostId) return;
+      final aId = ids[0];
+      final bId = ids[1];
+      _recordInFlight = true;
+      try {
+        await services.scoreStore.recordNagari(
+          idA: aId,
+          nameA: room.playerById(aId)?.name ?? '플레이어',
+          idB: bId,
+          nameB: room.playerById(bId)?.name ?? '플레이어',
+          gameId: room.gameId,
+        );
+        await _markRecorded(room);
+      } catch (_) {
+        // 기록 실패: recorded 미설정 → 다음 프레임 재시도.
+      } finally {
+        _recordInFlight = false;
+      }
+      return;
+    }
+
+    // 승부: 승자 클라이언트만 기록.
+    if (me != winner) return;
+    final loser = room.opponentOf(winner);
+    if (loser == null) return;
+    final score = (room.state['roundScore'] as num?)?.toInt() ?? 1;
+    _recordInFlight = true;
+    try {
+      await services.scoreStore.recordRound(
+        winnerId: winner,
+        winnerName: room.playerById(winner)?.name ?? '플레이어',
+        loserId: loser.id,
+        loserName: loser.name,
+        score: score,
+        gameId: room.gameId,
+      );
+      await _markRecorded(room);
+    } catch (_) {
+      // 기록 실패: recorded 미설정 → 다음 프레임 재시도.
+    } finally {
+      _recordInFlight = false;
+    }
+  }
+
+  /// 기존 state 를 보존하면서 recorded 표식만 추가해 잠근다.
+  Future<void> _markRecorded(Room room) {
+    final newState = Map<String, dynamic>.from(room.state);
+    newState['recorded'] = true;
+    return AppServices.of(
+      context,
+    ).roomService.updateRoom(session.roomCode, {'state': newState});
   }
 
   /// 완전 퇴장: 방을 떠나고 홈까지 돌아간다.
@@ -76,13 +157,15 @@ class _GameHostScreenState extends State<GameHostScreen> {
       final opp = room.opponentOf(me);
       if (opp != null) {
         final myName = room.playerById(me)?.name ?? '나';
-        // (a) 상대에게 1점 기록.
+        // (a) 상대에게 1점 기록(이 게임 전적). 기권은 즉시 leaveRoom 으로 방이
+        //     사라지므로 recorded 가드 없이 나가는 클라이언트가 1회만 기록한다.
         await services.scoreStore.recordRound(
           winnerId: opp.id,
           winnerName: opp.name,
           loserId: me,
           loserName: myName,
           score: 1,
+          gameId: room.gameId,
         );
         // (b) 기권 표식(기존 state 보존 후 키 추가).
         final newState = Map<String, dynamic>.from(room.state);
@@ -148,6 +231,17 @@ class _GameHostScreenState extends State<GameHostScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               final room = snap.data!;
+
+              // 라운드 종료 전적 기록(게임 무관 중앙화). 빌드 중 부작용을 피하려
+              // 다음 프레임에 호출한다. 가드(_recordInFlight + state.recorded)로 1회만.
+              if (room.status == RoomStatus.finished &&
+                  room.winner != null &&
+                  room.state['recorded'] != true) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _maybeRecordRound(room);
+                });
+              }
+
               final game = room.gameId.isEmpty
                   ? null
                   : GameRegistry.byId(room.gameId);
@@ -240,7 +334,9 @@ class _GameHostScreenState extends State<GameHostScreen> {
   }
 
   Widget _opponentBar(BuildContext context, Room room) {
-    final opp = room.opponentOf(session.myPlayerId);
+    final me = session.myPlayerId;
+    final opp = room.opponentOf(me);
+    final services = AppServices.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -253,9 +349,71 @@ class _GameHostScreenState extends State<GameHostScreen> {
             color: Colors.white38,
           ),
           const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              opp == null ? '상대 없음' : '상대: ${opp.name}',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // 이 게임의 head-to-head 승판수("나 X : 상대 Y").
+          if (opp != null && room.gameId.isNotEmpty)
+            StreamBuilder<HeadToHead?>(
+              stream: services.scoreStore.watchHeadToHeadForGame(
+                me,
+                opp.id,
+                room.gameId,
+              ),
+              builder: (context, snap) {
+                final h2h = snap.data;
+                final myWins = h2h?.winsOf(me) ?? 0;
+                final oppWins = h2h?.winsOf(opp.id) ?? 0;
+                return _h2hChip(myWins, oppWins);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// "나 X : 상대 Y" 승판수 칩.
+  Widget _h2hChip(int myWins, int oppWins) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: G42Colors.bg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            '나 ',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
           Text(
-            opp == null ? '상대 없음' : '상대: ${opp.name}',
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            '$myWins',
+            style: const TextStyle(
+              color: G42Colors.good,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const Text(
+            ' : ',
+            style: TextStyle(color: Colors.white38, fontSize: 12),
+          ),
+          Text(
+            '$oppWins',
+            style: const TextStyle(
+              color: G42Colors.bad,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const Text(
+            ' 상대',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ],
       ),

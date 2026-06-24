@@ -7,8 +7,8 @@ import 'score_store.dart';
 /// Firestore 기반 통산/상대 전적 저장소.
 ///
 /// 컬렉션 구조:
-///   - `profiles/{playerId}`  → PlayerStats 1개
-///   - `headtohead/{pairKey}` → HeadToHead 1개
+///   - `profiles/{playerId}`            → PlayerStats 1개 (게임 무관 통산)
+///   - `headtohead/{pairKey__gameId}`   → HeadToHead 1개 (페어 × 게임 단위 승판수)
 ///
 /// 원자성: 한 라운드 기록은 승자 profile / 패자 profile / h2h 문서 3개를 동시에
 /// 갱신해야 하므로 [WriteBatch] 로 묶어 하나의 원자적 커밋으로 처리한다.
@@ -34,9 +34,11 @@ class FirebaseScoreStore implements ScoreStore {
     required String loserId,
     required String loserName,
     required int score,
+    required String gameId,
   }) async {
     final batch = _db.batch();
     final pairKey = HeadToHead.keyFor(winnerId, loserId);
+    final docKey = HeadToHead.docKeyFor(winnerId, loserId, gameId);
 
     // 승자 profile: 점수/승/라운드 누적 + 식별자·이름 보장.
     batch.set(_profile(winnerId), {
@@ -55,9 +57,10 @@ class FirebaseScoreStore implements ScoreStore {
       'rounds': FieldValue.increment(1),
     }, SetOptions(merge: true));
 
-    // head-to-head: 승자 칸만 증가, 라운드 증가. (점 표기로 맵 부분 갱신)
-    batch.set(_h2h(pairKey), {
+    // head-to-head(페어×게임): 승자 칸만 증가, 라운드 증가. (점 표기로 맵 부분 갱신)
+    batch.set(_h2h(docKey), {
       'pairKey': pairKey,
+      'gameId': gameId,
       'wins': {winnerId: FieldValue.increment(1)},
       'scores': {winnerId: FieldValue.increment(score)},
       'rounds': FieldValue.increment(1),
@@ -72,9 +75,11 @@ class FirebaseScoreStore implements ScoreStore {
     required String nameA,
     required String idB,
     required String nameB,
+    required String gameId,
   }) async {
     final batch = _db.batch();
     final pairKey = HeadToHead.keyFor(idA, idB);
+    final docKey = HeadToHead.docKeyFor(idA, idB, gameId);
 
     batch.set(_profile(idA), {
       'playerId': idA,
@@ -90,8 +95,9 @@ class FirebaseScoreStore implements ScoreStore {
       'rounds': FieldValue.increment(1),
     }, SetOptions(merge: true));
 
-    batch.set(_h2h(pairKey), {
+    batch.set(_h2h(docKey), {
       'pairKey': pairKey,
+      'gameId': gameId,
       'nagari': FieldValue.increment(1),
       'rounds': FieldValue.increment(1),
     }, SetOptions(merge: true));
@@ -133,5 +139,44 @@ class FirebaseScoreStore implements ScoreStore {
       if (!snap.exists || snap.data() == null) return null;
       return HeadToHead.fromMap(snap.data()!);
     });
+  }
+
+  @override
+  Future<HeadToHead?> headToHeadForGame(
+    String idA,
+    String idB,
+    String gameId,
+  ) async {
+    final pairKey = HeadToHead.keyFor(idA, idB);
+    final docKey = HeadToHead.docKeyFor(idA, idB, gameId);
+    final snap = await _h2h(docKey).get();
+    if (!snap.exists || snap.data() == null) {
+      // 새 페어/새 게임: 자동 0-0.
+      return HeadToHead(pairKey: pairKey, gameId: gameId);
+    }
+    return HeadToHead.fromMap(snap.data()!);
+  }
+
+  @override
+  Stream<HeadToHead?> watchHeadToHeadForGame(
+    String idA,
+    String idB,
+    String gameId,
+  ) {
+    final pairKey = HeadToHead.keyFor(idA, idB);
+    final docKey = HeadToHead.docKeyFor(idA, idB, gameId);
+    return _h2h(docKey).snapshots().map((snap) {
+      if (!snap.exists || snap.data() == null) {
+        return HeadToHead(pairKey: pairKey, gameId: gameId);
+      }
+      return HeadToHead.fromMap(snap.data()!);
+    });
+  }
+
+  @override
+  Future<void> resetHeadToHead(String idA, String idB, String gameId) async {
+    final docKey = HeadToHead.docKeyFor(idA, idB, gameId);
+    // 그 (페어, 게임) 문서만 삭제 → 다음 조회 시 자동 0-0. 다른 게임/페어/통산 불변.
+    await _h2h(docKey).delete();
   }
 }
