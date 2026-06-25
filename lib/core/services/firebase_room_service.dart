@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/room.dart';
+import 'reconnecting_stream.dart';
 import 'room_service.dart';
 
 /// Firestore 기반 온라인 방 서비스.
@@ -90,15 +91,34 @@ class FirebaseRoomService implements RoomService {
   }
 
   @override
-  Stream<Room> watchRoom(String code) => _rooms
-      .doc(code.toUpperCase())
-      .snapshots()
-      .where((s) => s.exists)
-      .map((s) => Room.fromMap(s.data()!));
+  Stream<Room> watchRoom(String code) {
+    final doc = _rooms.doc(code.toUpperCase());
+    // 일시적 단절로 리스너가 에러를 내고 죽어도 자동 재구독한다(게임이 중간에
+    // 영구히 얼어붙는 "갑자기 끊김"을 방지). reconnectingStream 이 에러를 흡수하고
+    // 백오프 후 다시 snapshots() 를 구독하며, 재연결되면 현재 문서 스냅샷이 즉시
+    // 다시 흘러들어와 최신 상태로 복구된다.
+    return reconnectingStream<Room>(
+      () => doc
+          .snapshots()
+          .where((s) => s.exists)
+          .map((s) => Room.fromMap(s.data()!)),
+    );
+  }
 
   @override
   Future<void> updateRoom(String code, Map<String, dynamic> patch) =>
       _rooms.doc(code.toUpperCase()).update(patch);
+
+  @override
+  Future<void> heartbeat(String code, String playerId) async {
+    try {
+      await _rooms.doc(code.toUpperCase()).update({
+        'heartbeats.$playerId': FieldValue.increment(1),
+      });
+    } catch (_) {
+      // 방이 막 사라졌거나 일시적 단절 — 다음 틱에 재시도되므로 무시한다.
+    }
+  }
 
   @override
   Future<void> leaveRoom(String code, String playerId) async {

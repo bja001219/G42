@@ -50,6 +50,11 @@ abstract class RoomService {
 
   /// 방 떠나기.
   Future<void> leaveRoom(String code, String playerId);
+
+  /// 살아있음 신호: [playerId] 의 heartbeat 값을 1 올린다(상대가 관측해 연결 끊김을
+  /// 판단). `state` 등 다른 필드는 건드리지 않는 부분 갱신이며, 실패는 무시한다
+  /// (다음 주기에 자연히 재시도된다).
+  Future<void> heartbeat(String code, String playerId);
 }
 
 /// 사람이 읽고 입력하기 쉬운 4자리 방 코드 생성 (헷갈리는 글자 제외).

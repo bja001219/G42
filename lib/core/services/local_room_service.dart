@@ -111,6 +111,18 @@ class LocalRoomService implements RoomService {
   }
 
   @override
+  Future<void> heartbeat(String code, String playerId) async {
+    // 로컬(동일 기기 핫시트) 모드는 presence 가 무의미하지만, 인터페이스 일관성을
+    // 위해 자기 카운터를 올린다.
+    code = code.toUpperCase();
+    final room = _rooms[code];
+    if (room == null) return;
+    final current = room.heartbeatOf(playerId) ?? 0;
+    _rooms[code] = room.applyPatch({'heartbeats.$playerId': current + 1});
+    _emit(code);
+  }
+
+  @override
   Future<void> leaveRoom(String code, String playerId) async {
     code = code.toUpperCase();
     final room = _rooms[code];

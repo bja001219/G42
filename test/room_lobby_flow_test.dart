@@ -44,6 +44,9 @@ class _FakeRoomService implements RoomService {
   Future<void> leaveRoom(String code, String playerId) async {}
 
   @override
+  Future<void> heartbeat(String code, String playerId) async {}
+
+  @override
   Future<Room> createRoom({
     String gameId = '',
     required RoomPlayer host,

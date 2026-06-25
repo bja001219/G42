@@ -116,13 +116,14 @@ class _GameHostScreenState extends State<GameHostScreen> {
     ).roomService.updateRoom(session.roomCode, {'state': newState});
   }
 
-  /// 완전 퇴장: 방을 떠나고 홈까지 돌아간다.
+  /// 게임 나가기: 방을 떠나지 않고 **게임 선택 화면(대기실 picker)** 으로 돌아간다.
   ///
-  /// status==playing 이고 시작 후 30초가 지났으면 기권 처리(상대 +1점 기록 +
-  /// 기권 표식)한 뒤 나간다. 30초 미만이면 페널티 없이 일반 확인 후 나간다.
+  /// status==playing 이고 시작 후 30초가 지났으면 기권 처리(상대 +1점 기록)한 뒤
+  /// 나간다. 30초 미만이면 페널티 없이 일반 확인 후 나간다. 어느 쪽이든 방은 그대로
+  /// 유지하고 status=waiting/gameId='' 로 리셋하므로, 양쪽 모두 RoomLobbyScreen 의
+  /// 역전이(_onRoom)로 게임 선택 화면으로 자동 복귀한다(홈으로 튕기지 않는다).
   Future<void> _leave(BuildContext context, Room room) async {
     final services = AppServices.of(context);
-    final navigator = Navigator.of(context);
 
     final isPlaying = room.status == RoomStatus.playing;
     final elapsed = DateTime.now().difference(_startedAt);
@@ -135,8 +136,8 @@ class _GameHostScreenState extends State<GameHostScreen> {
         title: Text(isForfeit ? '게임 기권' : '게임 나가기'),
         content: Text(
           isForfeit
-              ? '지금 나가면 상대에게 1점이 들어가요. 나갈까요?'
-              : '방에서 나갈까요? 상대방의 게임도 종료됩니다.',
+              ? '지금 나가면 상대에게 1점이 들어가요. 게임 선택으로 돌아갈까요?'
+              : '이 게임을 끝내고 게임 선택으로 돌아갈까요?',
         ),
         actions: [
           TextButton(
@@ -158,8 +159,9 @@ class _GameHostScreenState extends State<GameHostScreen> {
       final opp = room.opponentOf(me);
       if (opp != null) {
         final myName = room.playerById(me)?.name ?? '나';
-        // (a) 상대에게 1점 기록(이 게임 전적). 기권은 즉시 leaveRoom 으로 방이
-        //     사라지므로 recorded 가드 없이 나가는 클라이언트가 1회만 기록한다.
+        // 상대에게 1점 기록(이 게임 전적). 방을 picker 로 리셋(playing→waiting)하므로
+        // status==finished 기반의 중앙 기록(_maybeRecordRound)은 트리거되지 않는다.
+        // → 나가는 클라이언트가 여기서 1회만 기록한다.
         await services.scoreStore.recordRound(
           winnerId: opp.id,
           winnerName: opp.name,
@@ -168,22 +170,19 @@ class _GameHostScreenState extends State<GameHostScreen> {
           score: 1,
           gameId: room.gameId,
         );
-        // (b) 기권 표식(기존 state 보존 후 키 추가).
-        final newState = Map<String, dynamic>.from(room.state);
-        newState['forfeit'] = true;
-        newState['forfeitWinnerId'] = opp.id;
-        await services.roomService.updateRoom(session.roomCode, {
-          'state': newState,
-        });
       }
     }
 
-    // (c) 방 떠나기.
-    await services.roomService.leaveRoom(session.roomCode, session.myPlayerId);
-    // (d) 홈까지 한 번에 복귀. popUntil은 루트까지 멱등이라 대기실 watcher의
-    //     자동 복귀(popUntil)와 겹쳐도 빈 화면/중복 pop이 나지 않는다.
-    if (!mounted) return;
-    navigator.popUntil((r) => r.isFirst);
+    // 방은 그대로 두고 게임 선택(대기실 picker) 상태로 리셋한다. RoomLobbyScreen 의
+    // 역전이(_inGame && status==waiting → pop)가 양쪽 게임 화면을 자동으로 닫아
+    // 둘 다 게임 선택 화면으로 복귀한다(여기서 직접 pop 하지 않는다 — 중복 pop 방지).
+    await services.roomService.updateRoom(session.roomCode, {
+      'status': RoomStatus.waiting.name,
+      'gameId': '',
+      'turn': null,
+      'winner': null,
+      'state': <String, dynamic>{},
+    });
   }
 
   /// "같은 게임 한 판 더": 같은 게임을 재제안한다. status=waiting로 가면 양쪽이

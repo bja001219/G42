@@ -7,6 +7,7 @@ import 'gostop/gostop_game.dart';
 import 'omok/omok_game.dart';
 import 'onecard/onecard_game.dart';
 import 'reaction/reaction_game.dart';
+import 'tetris/tetris_game.dart';
 
 /// 앱에 내장된 게임 목록.
 ///
@@ -21,4 +22,5 @@ final List<GameDefinition> builtInGames = <GameDefinition>[
   // 보글: 단일 게임. 영/한 + 4×4~10×10 크기는 방장이 시작 전 설정.
   const BoggleGame(),
   GoStopGame(),
+  TetrisGame(),
 ];

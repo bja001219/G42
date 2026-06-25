@@ -9,6 +9,7 @@ import '../core/game_registry.dart';
 import '../core/game_session.dart';
 import '../core/models/head_to_head.dart';
 import '../core/models/room.dart';
+import '../core/services/presence.dart';
 import '../core/services/room_service.dart';
 import '../theme.dart';
 import 'game_host_screen.dart';
@@ -30,7 +31,8 @@ class RoomLobbyScreen extends StatefulWidget {
   State<RoomLobbyScreen> createState() => _RoomLobbyScreenState();
 }
 
-class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
+class _RoomLobbyScreenState extends State<RoomLobbyScreen>
+    with WidgetsBindingObserver {
   StreamSubscription<Room>? _sub;
   Room? _room;
 
@@ -52,18 +54,82 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
   /// _goToGame을 트리거"하도록 막고, status가 waiting으로 되돌아오면 해제한다.
   bool _consumedPlaying = false;
 
+  // ---- 상대 연결(presence) 감지 ----
+  /// 내 heartbeat 를 주기적으로 보낸다(방에 있는 동안 계속).
+  HeartbeatSender? _heartbeat;
+
+  /// 상대 heartbeat 침묵을 감지하는 감지기(보수적: arm 전엔 절대 끊김 판정 안 함).
+  OpponentPresence? _presence;
+
+  /// 주기적으로 stale 여부를 확인하는 타이머.
+  Timer? _presenceTimer;
+
+  /// "상대 연결 끊김?" 안내가 떠 있는지(중복 표시/재진입 방지).
+  bool _presenceDialogOpen = false;
+
+  /// 떠 있는 presence 안내의 자체 context(정확히 그 다이얼로그만 닫기 위함).
+  BuildContext? _presenceDialogCtx;
+
+  /// 앱이 백그라운드 상태인지(복귀 직후 오판 방지).
+  bool _appPaused = false;
+
+  /// 방 나가기가 진행 중인지(_leave 와 _handleOpponentLeft 의 중복 popUntil 방지).
+  bool _leaving = false;
+
   RoomService get _service => AppServices.of(context).roomService;
   String get _myId => AppServices.of(context).identity.playerId;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _sub ??= _service.watchRoom(widget.code).listen(_onRoom);
+    // onError 를 둬서 전송 계층이 에러를 흘려도 구독이 조용히 죽지 않게 한다.
+    // (FirebaseRoomService.watchRoom 은 이미 자동 재구독으로 에러를 흡수하지만,
+    //  방어적으로 한 겹 더 둔다.)
+    _sub ??= _service.watchRoom(widget.code).listen(
+      _onRoom,
+      onError: (Object e, StackTrace st) =>
+          debugPrint('대기실 방 구독 에러(무시하고 유지): $e'),
+    );
+
+    // presence: 온라인일 때만. 내 heartbeat 송신을 시작하고, 상대 침묵을 주기적으로
+    // 확인한다. (대기실에 머무는 동안 계속 돌아 인게임에서도 유효하다.)
+    if (_service.isOnline && _heartbeat == null) {
+      _heartbeat = HeartbeatSender(
+        service: _service,
+        code: widget.code,
+        playerId: _myId,
+      )..start();
+      _presence = OpponentPresence();
+      _presenceTimer = Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _checkPresence(),
+      );
+      // 앱 백그라운드/복귀 감지: 백그라운드 동안 스냅샷이 끊겨 멀쩡한 상대를
+      // 끊겼다고 오판하는 것을 막기 위해, 백그라운드로 가면 presence 를 무장 해제하고
+      // 복귀 후 새 heartbeat 를 다시 관측할 때까지 stale 판정을 하지 않는다.
+      WidgetsBinding.instance.addObserver(this);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final resumed = state == AppLifecycleState.resumed;
+    if (!resumed) {
+      // 백그라운드/비활성 진입: 다음 임계 카운트의 기준을 리셋(무장 해제).
+      _appPaused = true;
+      _presence?.disarm();
+    } else {
+      _appPaused = false;
+      // 복귀 즉시엔 stale 판정을 미룬다. 다음 스냅샷의 observe 가 다시 arm 한다.
+    }
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _heartbeat?.stop();
+    _presenceTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -71,6 +137,19 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
   void _onRoom(Room room) {
     if (!mounted) return;
     setState(() => _room = room);
+
+    // presence: 상대 heartbeat 관측. 값이 다시 움직였으면(상대 복귀) 떠 있던 "연결
+    // 끊김?" 안내를 자동으로 닫는다.
+    final presence = _presence;
+    if (presence != null) {
+      final oppId = room.opponentOf(_myId)?.id;
+      final beat = oppId == null ? null : room.heartbeatOf(oppId);
+      final revived = presence.observe(beat);
+      if (revived && _presenceDialogOpen) {
+        // 상대 복귀 → 떠 있던 안내만 정확히 닫는다(그 다이얼로그 자체 context 로).
+        _dismissPresenceDialog();
+      }
+    }
 
     // status가 waiting으로 되돌아오면(=대기실 리셋/재제안 완료) 재진입 래치를 푼다.
     // 이로써 다음 게임 세션에서는 다시 한 번 _goToGame이 트리거될 수 있다.
@@ -131,6 +210,7 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
   /// 상대가 완전히 나갔다. 게임 중이든 대기실이든 홈까지 자동 복귀한다.
   /// 상대 기권으로 내가 승점을 얻었으면 그에 맞는 토스트를 띄운다.
   void _handleOpponentLeft(Room room) {
+    if (_leaving) return; // 내가 이미 나가는 중이면 중복 popUntil 하지 않는다.
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     // 내가 나간 경우(players에서 내가 빠짐)엔 토스트 없이 홈으로만.
@@ -144,6 +224,86 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
     messenger.showSnackBar(
       SnackBar(content: Text(iWonByForfeit ? '상대 기권 — 1점 획득!' : '상대가 나갔습니다')),
     );
+  }
+
+  // ---- 상대 연결 끊김 감지(보수적) ----
+  /// 주기 타이머가 호출. 인게임 중 상대 heartbeat 가 임계 시간 넘게 침묵하면(=상대
+  /// 새로고침/강제종료 추정) 안내한다. 정상 플레이 중엔 절대 끼어들지 않는다:
+  /// presence 가 arm 된(상대를 한 번이라도 관측한) 뒤, 완전 침묵이 임계를 넘을 때만.
+  void _checkPresence() {
+    if (!mounted || _presenceDialogOpen) return;
+    // 오판 방지의 *실제* 안전장치는 disarm()이다: 백그라운드 진입 시 presence 를
+    // 무장 해제하면 새 heartbeat 를 다시 관측하기 전까지 isStale() 가 항상 false 다.
+    // 아래 _appPaused 게이트는 그 위의 최적화(불필요한 체크 스킵)일 뿐이다.
+    if (_appPaused) return;
+    if (_opponentLeftHandled || _leaving) return; // 이미 홈으로 가는 중.
+    final room = _room;
+    final presence = _presence;
+    if (room == null || presence == null) return;
+    if (!_inGame) return; // 인게임에서만(대기실은 직접 나가면 되므로 안 띄움).
+    if (!room.isFull) return; // 상대가 실제로 빠졌으면 _handleOpponentLeft 가 처리.
+    if (presence.isStale()) {
+      _showPresenceDialog();
+    }
+  }
+
+  /// 떠 있는 presence 안내를 **그 다이얼로그 자체 context** 로 정확히 닫는다.
+  /// 루트 내비게이터를 직접 pop 하지 않으므로 어떤 타이밍에도 게임 화면을 잘못 닫지
+  /// 않는다(context.mounted 로 이미 사라진 경우도 안전).
+  void _dismissPresenceDialog() {
+    _presenceDialogOpen = false;
+    final dctx = _presenceDialogCtx;
+    _presenceDialogCtx = null;
+    if (dctx != null && dctx.mounted) Navigator.of(dctx).pop(true);
+  }
+
+  /// 절대 자동으로 끊지 않는다 — 사용자에게 [계속 기다리기]/[나가기] 선택권만 준다.
+  /// 상대가 다시 응답하면(_onRoom 에서) 이 안내는 자동으로 닫힌다.
+  Future<void> _showPresenceDialog() async {
+    if (!mounted) return; // 타이머 틱과 dispose 사이 레이스 방어.
+    final oppName = _room?.opponentOf(_myId)?.name ?? '상대';
+    _presenceDialogOpen = true;
+    final stay = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        _presenceDialogCtx = ctx; // 자동 닫기에서 이 다이얼로그만 정확히 닫기 위함.
+        return AlertDialog(
+          backgroundColor: G42Colors.surface,
+          title: const Text('상대 연결 확인'),
+          content: Text(
+            '$oppName 님의 응답이 한동안 없어요. 연결이 끊겼을 수 있습니다.\n계속 기다릴까요?',
+          ),
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: G42Colors.bad),
+              onPressed: () {
+                _presenceDialogOpen = false;
+                _presenceDialogCtx = null;
+                Navigator.pop(ctx, false);
+              },
+              child: const Text('나가기'),
+            ),
+            FilledButton(
+              onPressed: () {
+                _presenceDialogOpen = false;
+                _presenceDialogCtx = null;
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('계속 기다리기'),
+            ),
+          ],
+        );
+      },
+    );
+    _presenceDialogOpen = false;
+    _presenceDialogCtx = null;
+    if (!mounted) return;
+    if (stay == false) {
+      await _leave(); // 끊김 추정 → 페널티 없이 방을 떠나 홈으로.
+    } else {
+      _presence?.snooze(); // 다음 임계까지 다시 기다린다.
+    }
   }
 
   // ---- 게임 화면 진입 후 복귀 처리 ----
@@ -304,6 +464,8 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen> {
 
   // ---- 방 나가기 ----
   Future<void> _leave() async {
+    if (_leaving) return; // 중복 호출/중복 popUntil 방지(_handleOpponentLeft 와의 레이스).
+    _leaving = true;
     final navigator = Navigator.of(context);
     await _service.leaveRoom(widget.code, _myId);
     if (!mounted) return;
