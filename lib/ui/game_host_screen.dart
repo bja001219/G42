@@ -6,6 +6,7 @@ import '../core/game_session.dart';
 import '../core/models/head_to_head.dart';
 import '../core/models/room.dart';
 import '../theme.dart';
+import 'landscape_lock.dart';
 
 /// 인게임 화면 컨테이너. 상단 바(게임 제목 / 방 코드 / 나가기) + 실제 게임 위젯.
 ///
@@ -246,25 +247,30 @@ class _GameHostScreenState extends State<GameHostScreen> {
                   ? null
                   : GameRegistry.byId(room.gameId);
 
-              if (game == null) {
-                return _waiting(context, room);
-              }
+              // 고스톱처럼 가로로 진행하는 게임이면 화면을 가로로 눕힌다.
+              // (LandscapeLock 을 트리에 항상 두어 enabled 변화가 didUpdateWidget
+              //  으로 반영되게 한다 — 게임 종료/선택 화면으로 돌아가면 세로 복귀.)
+              final wantsLandscape = game?.prefersLandscape ?? false;
 
-              return Stack(
-                children: [
-                  Column(
-                    children: [
-                      _topBar(context, room, game.title, game.icon),
-                      _opponentBar(context, room),
-                      Expanded(child: game.buildGame(context, session)),
-                    ],
-                  ),
-                  // 정상 종료(둘 다 남아있음)면 통합 결과/프롬프트 풀 오버레이로
-                  // 게임 위젯의 자체 결과/재대국 UI를 덮는다.
-                  if (room.status == RoomStatus.finished && room.isFull)
-                    _resultOverlay(context, room),
-                ],
-              );
+              final Widget content = game == null
+                  ? _waiting(context, room)
+                  : Stack(
+                      children: [
+                        Column(
+                          children: [
+                            _topBar(context, room, game.title, game.icon),
+                            _opponentBar(context, room),
+                            Expanded(child: game.buildGame(context, session)),
+                          ],
+                        ),
+                        // 정상 종료(둘 다 남아있음)면 통합 결과/프롬프트 풀 오버레이로
+                        // 게임 위젯의 자체 결과/재대국 UI를 덮는다.
+                        if (room.status == RoomStatus.finished && room.isFull)
+                          _resultOverlay(context, room),
+                      ],
+                    );
+
+              return LandscapeLock(enabled: wantsLandscape, child: content);
             },
           ),
         ),

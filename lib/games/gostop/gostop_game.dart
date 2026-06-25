@@ -26,6 +26,10 @@ class GoStopGame extends GameDefinition {
   @override
   List<Color> get gradient => const [Color(0xFFE53935), Color(0xFFFFB300)];
 
+  /// 고스톱은 화면을 가로로 눕혀서 진행한다.
+  @override
+  bool get prefersLandscape => true;
+
   @override
   Map<String, dynamic> createInitialState(List<String> playerIds) {
     final seed = DateTime.now().microsecondsSinceEpoch & 0x7fffffff;

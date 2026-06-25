@@ -35,6 +35,13 @@ abstract class GameDefinition {
   /// 첫 차례 플레이어 id. 기본은 호스트.
   String firstTurn(List<String> playerIds) => playerIds.first;
 
+  /// 인게임 화면을 가로(landscape)로 눕혀서 진행할지 여부.
+  ///
+  /// true 면 [GameHostScreen]이 게임 시작 시 화면을 가로로 고정한다
+  /// (고스톱 등 카드/테이블 게임). 기본은 세로(false). 다른 게임도 이 게터를
+  /// true 로 오버라이드하면 한 줄로 가로 모드를 켤 수 있다.
+  bool get prefersLandscape => false;
+
   // ---- 시작 전 방장 설정(옵션) -------------------------------------------------
   // 게임에 따라 시작 전 방장이 옵션을 고를 수 있다(예: 보글의 보드 크기/언어).
   // 설정을 지원하지 않는 게임은 아래 기본 구현을 그대로 쓰며 영향이 없다.
