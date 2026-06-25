@@ -179,22 +179,37 @@ class _BlackjackViewState extends State<BlackjackView> {
         (_phase == 'bet' || _phase == 'player');
     if (showCurtain) return _curtainScreen(context);
 
-    final content = SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _scoreBar(),
-          const SizedBox(height: 12),
-          _turnBanner(finished),
-          const SizedBox(height: 16),
-          _handsArea(finished),
-          const SizedBox(height: 16),
-          if (!finished && _phase == 'bet' && _canAct()) _betPanel(),
-          if (!finished && _phase == 'player' && _canAct()) _actionButtons(),
-          if (!finished && _phase == 'reveal') _revealArea(),
-        ],
-      ),
+    // Determine which bottom control panel to show.
+    Widget? controls;
+    if (!finished) {
+      if (_phase == 'bet' && _canAct()) {
+        controls = _betPanel();
+      } else if (_phase == 'player' && _canAct()) {
+        controls = _actionButtons();
+      } else if (_phase == 'reveal') {
+        controls = _revealArea();
+      }
+    }
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Fixed top: score + turn banner ──
+        _scoreBar(),
+        const SizedBox(height: 4),
+        _turnBanner(finished),
+        const SizedBox(height: 4),
+        // ── Flexible middle: card table ──
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return _handsArea(finished, constraints);
+            },
+          ),
+        ),
+        // ── Fixed bottom: controls ──
+        if (controls != null) ...[const SizedBox(height: 4), controls],
+      ],
     );
 
     if (!finished) return content;
@@ -523,10 +538,10 @@ class _BlackjackViewState extends State<BlackjackView> {
     final a = ids.isNotEmpty ? ids[0] : '';
     final b = ids.length > 1 ? ids[1] : '';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: G42Colors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: G42Colors.surfaceHi),
       ),
       child: Row(
@@ -534,17 +549,19 @@ class _BlackjackViewState extends State<BlackjackView> {
           _chipPill(a, G42Colors.accent),
           const SizedBox(width: 8),
           Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 '$_roundNo라운드',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
+                  fontSize: 13,
                 ),
               ),
               const Text(
                 '칩 0이면 종료',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+                style: TextStyle(color: Colors.white38, fontSize: 10),
               ),
             ],
           ),
@@ -560,43 +577,42 @@ class _BlackjackViewState extends State<BlackjackView> {
     final isDealer = pid == _dealerId;
     return Expanded(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             _nameOf(pid),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
           ),
-          const SizedBox(height: 2),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.album_rounded, size: 16, color: color),
-              const SizedBox(width: 4),
+              Icon(Icons.album_rounded, size: 14, color: color),
+              const SizedBox(width: 3),
               Text(
                 '${_chipsOf(pid)}',
                 style: TextStyle(
                   color: color,
-                  fontSize: 22,
+                  fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 2),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             decoration: BoxDecoration(
               color: (isDealer ? G42Colors.warn : G42Colors.good).withValues(
                 alpha: 0.18,
               ),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               isDealer ? '딜러' : '플레이어',
               style: TextStyle(
                 color: isDealer ? G42Colors.warn : G42Colors.good,
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -657,10 +673,10 @@ class _BlackjackViewState extends State<BlackjackView> {
 
   Widget _bannerBox(String label, Color color, IconData icon, bool active) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: active ? color.withValues(alpha: 0.20) : G42Colors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: active ? color : G42Colors.surfaceHi,
           width: active ? 2 : 1,
@@ -668,13 +684,13 @@ class _BlackjackViewState extends State<BlackjackView> {
       ),
       child: Row(
         children: [
-          Icon(icon, color: active ? color : Colors.white54),
-          const SizedBox(width: 12),
+          Icon(icon, size: 16, color: active ? color : Colors.white54),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 15,
+                fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: active ? Colors.white : Colors.white60,
               ),
@@ -687,7 +703,9 @@ class _BlackjackViewState extends State<BlackjackView> {
 
   // ---- 위젯 조각: 손패 영역 -------------------------------------------------
 
-  Widget _handsArea(bool finished) {
+  /// The card table area. Receives bounded [constraints] from LayoutBuilder
+  /// so card sizes can adapt. Never scrolls — fits within the Expanded region.
+  Widget _handsArea(bool finished, BoxConstraints constraints) {
     final reveal = _phase == 'reveal' || finished;
     final dealer = _dealerId;
     final bettor = _bettorId;
@@ -695,6 +713,26 @@ class _BlackjackViewState extends State<BlackjackView> {
     // 딜러의 홀 카드: reveal 전이며 보는 사람이 딜러 본인이 아니면 가린다.
     final hideDealerHole = !reveal && _me != dealer;
     final dealerHand = _handOf(dealer);
+
+    // Distribute available height across panels.
+    // With split: 3 panels; without: 2 panels.
+    final hasSplit = _split;
+    final panelCount = hasSplit ? 3 : 2;
+    // Each panel gets an equal share of the available height.
+    final spacing = 6.0;
+    final totalSpacing = spacing * (panelCount - 1);
+    final panelHeight = ((constraints.maxHeight - totalSpacing) / panelCount)
+        .clamp(60.0, double.infinity);
+
+    // Card size: fit ~5 cards side-by-side in width with some overlap margin,
+    // and height = width * 1.4, clamped so it fits in the panel.
+    final availableWidth = constraints.maxWidth;
+    // Each panel has 12px padding on each side, so inner width is narrower.
+    final innerWidth = availableWidth - 24;
+    // Card width: aim to show 5 cards without overlap on inner width.
+    // Use 1/6 of inner width so there's always space even with many cards.
+    final cardW = (innerWidth / 6).clamp(28.0, 46.0);
+    final cardH = (cardW * 1.4).clamp(38.0, 64.0);
 
     return Column(
       children: [
@@ -707,8 +745,11 @@ class _BlackjackViewState extends State<BlackjackView> {
           showTotal: !hideDealerHole && dealerHand.isNotEmpty,
           highlight: false,
           active: false,
+          panelHeight: panelHeight,
+          cardW: cardW,
+          cardH: cardH,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: spacing),
         // 플레이어 영역(스플릿이면 두 손패).
         _handPanel(
           title: _split
@@ -721,9 +762,12 @@ class _BlackjackViewState extends State<BlackjackView> {
           highlight: !reveal && _phase == 'player' && _activeHand == 0,
           active: _split && _activeHand == 0,
           betLabel: _handOf(bettor).isNotEmpty ? '베팅 $_bet0' : null,
+          panelHeight: panelHeight,
+          cardW: cardW,
+          cardH: cardH,
         ),
-        if (_split) ...[
-          const SizedBox(height: 12),
+        if (hasSplit) ...[
+          SizedBox(height: spacing),
           _handPanel(
             title: '플레이어 · ${_nameOf(bettor)} (손패 2)',
             isMe: _me == bettor,
@@ -733,6 +777,9 @@ class _BlackjackViewState extends State<BlackjackView> {
             highlight: !reveal && _phase == 'player' && _activeHand == 1,
             active: _activeHand == 1,
             betLabel: '베팅 $_bet1',
+            panelHeight: panelHeight,
+            cardW: cardW,
+            cardH: cardH,
           ),
         ],
       ],
@@ -747,6 +794,9 @@ class _BlackjackViewState extends State<BlackjackView> {
     required bool showTotal,
     required bool highlight,
     required bool active,
+    required double panelHeight,
+    required double cardW,
+    required double cardH,
     String? betLabel,
   }) {
     final total = BlackjackLogic.handTotal(cards);
@@ -763,76 +813,131 @@ class _BlackjackViewState extends State<BlackjackView> {
       borderColor = G42Colors.surfaceHi;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: G42Colors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: borderColor,
-          width: (active || highlight) ? 2 : 1,
+    // Height of the header row area (title + badge).
+    const headerH = 22.0;
+
+    return SizedBox(
+      height: panelHeight,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: G42Colors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: borderColor,
+            width: (active || highlight) ? 2 : 1,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  title,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+        // 카드 영역은 Expanded 로 남는 높이를 흡수한다(고정 산술의 0px 슬랙으로
+        // 인한 소수점 오버플로우를 원천 차단). 패널은 항상 panelHeight 에 꼭 맞는다.
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            // Header row.
+            SizedBox(
+              height: headerH,
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
+                  if (isMe) ...[
+                    const SizedBox(width: 4),
+                    const Text(
+                      '(나)',
+                      style: TextStyle(color: Colors.white38, fontSize: 10),
+                    ),
+                  ],
+                  const Spacer(),
+                  if (showTotal)
+                    _totalBadge(total, bust, natural, soft)
+                  else
+                    const Text(
+                      '?',
+                      style: TextStyle(
+                        color: Colors.white38,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Card strip — Expanded 가 남는 높이를 채우고, 카드 부채는 그 안에서
+            // 본래 높이(cardH)로 좌측 정렬된다. 패널이 작아도 오버플로우 없음.
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: cards.isEmpty
+                    ? const Text(
+                        '대기 중',
+                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                      )
+                    : _cardFan(cards, hiddenFrom, cardW, cardH),
+              ),
+            ),
+            if (betLabel != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                betLabel,
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  height: 1.0,
                 ),
               ),
-              if (isMe) ...[
-                const SizedBox(width: 6),
-                const Text(
-                  '(나)',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
-                ),
-              ],
-              const Spacer(),
-              if (showTotal)
-                _totalBadge(total, bust, natural, soft)
-              else
-                const Text(
-                  '?',
-                  style: TextStyle(
-                    color: Colors.white38,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Renders cards as a horizontal overlapping fan so they always fit in one
+  /// row regardless of how many cards are in the hand.
+  Widget _cardFan(List<int> cards, int hiddenFrom, double cardW, double cardH) {
+    const maxVisible = 10;
+    final count = cards.length.clamp(0, maxVisible);
+    // The overlap step: if we have many cards, shrink the step so they all fit.
+    // With 2 cards, step = cardW (no overlap). With 10 cards, overlap more.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availW = constraints.maxWidth;
+        // Step between cards: allow overlap but keep at least 8px visible per card.
+        final minStep = 8.0;
+        final naturalStep = cardW + 4;
+        final maxStepForAll = count > 1
+            ? ((availW - cardW) / (count - 1)).clamp(minStep, naturalStep)
+            : naturalStep;
+        final step = maxStepForAll;
+        final totalW = count > 0 ? cardW + step * (count - 1) : 0.0;
+        return SizedBox(
+          width: totalW,
+          height: cardH,
+          child: Stack(
+            children: [
+              for (var i = 0; i < count; i++)
+                Positioned(
+                  left: i * step,
+                  top: 0,
+                  child: i >= hiddenFrom
+                      ? _faceDownCard(cardW, cardH)
+                      : _cardChip(cards[i], cardW, cardH),
                 ),
             ],
           ),
-          const SizedBox(height: 10),
-          if (cards.isEmpty)
-            const Text(
-              '대기 중',
-              style: TextStyle(color: Colors.white38, fontSize: 13),
-            )
-          else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (var i = 0; i < cards.length; i++)
-                  i >= hiddenFrom ? _faceDownCard() : _cardChip(cards[i]),
-              ],
-            ),
-          if (betLabel != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              betLabel,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -850,10 +955,10 @@ class _BlackjackViewState extends State<BlackjackView> {
       text = soft ? '$total (소프트)' : '$total';
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.20),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color),
       ),
       child: Text(
@@ -861,20 +966,20 @@ class _BlackjackViewState extends State<BlackjackView> {
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.w800,
-          fontSize: 13,
+          fontSize: 11,
         ),
       ),
     );
   }
 
-  Widget _cardChip(int card) {
+  Widget _cardChip(int card, double w, double h) {
     final red = BlackjackLogic.isRed(card);
     return Container(
-      width: 46,
-      height: 64,
+      width: w,
+      height: h,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.black12),
       ),
       child: Center(
@@ -883,24 +988,28 @@ class _BlackjackViewState extends State<BlackjackView> {
           style: TextStyle(
             color: red ? const Color(0xFFD63031) : const Color(0xFF1A1B2E),
             fontWeight: FontWeight.w800,
-            fontSize: 15,
+            fontSize: (w * 0.33).clamp(9.0, 15.0),
           ),
         ),
       ),
     );
   }
 
-  Widget _faceDownCard() {
+  Widget _faceDownCard(double w, double h) {
     return Container(
-      width: 46,
-      height: 64,
+      width: w,
+      height: h,
       decoration: BoxDecoration(
         color: G42Colors.surfaceHi,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: G42Colors.accent.withValues(alpha: 0.5)),
       ),
       child: const Center(
-        child: Icon(Icons.help_outline_rounded, color: Colors.white38),
+        child: Icon(
+          Icons.help_outline_rounded,
+          color: Colors.white38,
+          size: 14,
+        ),
       ),
     );
   }
@@ -921,40 +1030,47 @@ class _BlackjackViewState extends State<BlackjackView> {
     void setBet(int v) => setState(() => _betAmount = v.clamp(1, maxBet));
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: G42Colors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: G42Colors.surfaceHi),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.album_rounded, color: G42Colors.accent),
-              const SizedBox(width: 8),
+              const Icon(
+                Icons.album_rounded,
+                color: G42Colors.accent,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
               Text(
                 '$amount 칩',
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 24,
+                  fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
               ),
               Text(
                 ' / 최대 $maxBet',
-                style: const TextStyle(color: Colors.white38, fontSize: 13),
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
               ),
             ],
           ),
-          const SizedBox(height: 8),
           Row(
             children: [
-              IconButton.filledTonal(
+              IconButton(
                 onPressed: amount > 1 ? () => setBet(amount - 5) : null,
-                icon: const Icon(Icons.remove_rounded),
+                icon: const Icon(Icons.remove_rounded, size: 18),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
               Expanded(
                 child: Slider(
@@ -966,30 +1082,54 @@ class _BlackjackViewState extends State<BlackjackView> {
                   onChanged: (v) => setBet(v.round()),
                 ),
               ),
-              IconButton.filledTonal(
+              IconButton(
                 onPressed: amount < maxBet ? () => setBet(amount + 5) : null,
-                icon: const Icon(Icons.add_rounded),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              for (final v in [10, 25, 50])
+                if (v <= maxBet) ...[
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => setBet(v),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: Text('$v', style: const TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setBet(maxBet),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('최대', style: TextStyle(fontSize: 12)),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final v in [10, 25, 50])
-                if (v <= maxBet)
-                  OutlinedButton(onPressed: () => setBet(v), child: Text('$v')),
-              OutlinedButton(
-                onPressed: () => setBet(maxBet),
-                child: const Text('최대'),
+          SizedBox(
+            height: 38,
+            child: FilledButton.icon(
+              onPressed: _onDeal,
+              icon: const Icon(Icons.casino_rounded, size: 16),
+              label: Text('$amount 베팅하고 딜'),
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: _onDeal,
-            icon: const Icon(Icons.casino_rounded),
-            label: Text('$amount 베팅하고 딜'),
+            ),
           ),
         ],
       ),
@@ -1011,43 +1151,72 @@ class _BlackjackViewState extends State<BlackjackView> {
         (_bet0 * 2) <= _coverage;
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           children: [
             Expanded(
-              child: FilledButton.icon(
-                onPressed: _onHit,
-                icon: const Icon(Icons.add_card_rounded),
-                label: const Text('Hit'),
+              child: SizedBox(
+                height: 38,
+                child: FilledButton.icon(
+                  onPressed: _onHit,
+                  icon: const Icon(Icons.add_card_rounded, size: 16),
+                  label: const Text('Hit'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                  ),
+                ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _onStand,
-                icon: const Icon(Icons.front_hand_rounded),
-                label: const Text('Stand'),
+              child: SizedBox(
+                height: 38,
+                child: OutlinedButton.icon(
+                  onPressed: _onStand,
+                  icon: const Icon(Icons.front_hand_rounded, size: 16),
+                  label: const Text('Stand'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                  ),
+                ),
               ),
             ),
           ],
         ),
         if (canDouble || canSplit) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: canDouble ? _onDouble : null,
-                  icon: const Icon(Icons.exposure_plus_2_rounded),
-                  label: const Text('더블다운'),
+                child: SizedBox(
+                  height: 36,
+                  child: OutlinedButton.icon(
+                    onPressed: canDouble ? _onDouble : null,
+                    icon: const Icon(Icons.exposure_plus_2_rounded, size: 14),
+                    label: const Text('더블다운', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: canSplit ? _onSplit : null,
-                  icon: const Icon(Icons.call_split_rounded),
-                  label: const Text('스플릿'),
+                child: SizedBox(
+                  height: 36,
+                  child: OutlinedButton.icon(
+                    onPressed: canSplit ? _onSplit : null,
+                    icon: const Icon(Icons.call_split_rounded, size: 14),
+                    label: const Text('스플릿', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1066,7 +1235,7 @@ class _BlackjackViewState extends State<BlackjackView> {
 
     if (!iAmHost) {
       return const Padding(
-        padding: EdgeInsets.only(top: 8),
+        padding: EdgeInsets.symmetric(vertical: 4),
         child: Text(
           '다음 라운드를 기다리는 중...',
           textAlign: TextAlign.center,
@@ -1074,10 +1243,14 @@ class _BlackjackViewState extends State<BlackjackView> {
         ),
       );
     }
-    return FilledButton.icon(
-      onPressed: _onNextRound,
-      icon: const Icon(Icons.skip_next_rounded),
-      label: const Text('다음 라운드'),
+    return SizedBox(
+      height: 38,
+      child: FilledButton.icon(
+        onPressed: _onNextRound,
+        icon: const Icon(Icons.skip_next_rounded, size: 16),
+        label: const Text('다음 라운드'),
+        style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+      ),
     );
   }
 

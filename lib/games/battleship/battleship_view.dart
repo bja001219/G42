@@ -184,30 +184,41 @@ class _BattleshipViewState extends State<BattleshipView> {
 
     final placingDone = _nextShip >= BattleshipLogic.shipSizes.length;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _phaseHeader(
-            label: '함대 배치',
-            sub: placingDone
-                ? '배치 완료! 준비를 누르세요.'
-                : '${BattleshipLogic.shipSizes[_nextShip]}칸 함선을 놓을 위치를 탭하세요.',
-            color: G42Colors.accent,
-          ),
-          const SizedBox(height: 12),
-          _shipPalette(),
-          const SizedBox(height: 12),
-          MouseRegion(
-            onExit: (_) => setState(() => _hoverIndex = null),
-            child: BattleshipGrid(
-              cellAt: (i) => _placingCellAt(myBoard, i),
-              onTap: placingDone ? null : (i) => _onPlaceTap(myBoard, i),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 컴팩트 상태 헤더.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: _compactPlacingHeader(placingDone),
+        ),
+        // 함선 팔레트 (가로 스크롤, 높이 고정).
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+          child: _shipPalette(),
+        ),
+        // 보드: 남은 공간을 꽉 채움.
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: MouseRegion(
+                  onExit: (_) => setState(() => _hoverIndex = null),
+                  child: BattleshipGrid(
+                    cellAt: (i) => _placingCellAt(myBoard, i),
+                    onTap: placingDone ? null : (i) => _onPlaceTap(myBoard, i),
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          Row(
+        ),
+        // 방향/랜덤/지우기 버튼 행.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+          child: Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
@@ -216,33 +227,83 @@ class _BattleshipViewState extends State<BattleshipView> {
                     _horizontal
                         ? Icons.swap_horiz_rounded
                         : Icons.swap_vert_rounded,
+                    size: 16,
                   ),
                   label: Text(_horizontal ? '가로' : '세로'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _onRandomize,
-                  icon: const Icon(Icons.casino_rounded),
+                  icon: const Icon(Icons.casino_rounded, size: 16),
                   label: const Text('랜덤'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _onClearPlacement,
-                  icon: const Icon(Icons.clear_all_rounded),
+                  icon: const Icon(Icons.clear_all_rounded, size: 16),
                   label: const Text('지우기'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
+        ),
+        // 준비 완료 버튼.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: FilledButton.icon(
             onPressed: placingDone ? _onReady : null,
-            icon: const Icon(Icons.check_circle_rounded),
+            icon: const Icon(Icons.check_circle_rounded, size: 18),
             label: const Text('준비 완료'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _compactPlacingHeader(bool placingDone) {
+    final color = G42Colors.accent;
+    final sub = placingDone
+        ? '배치 완료! 준비를 누르세요.'
+        : '${BattleshipLogic.shipSizes[_nextShip]}칸 함선을 놓을 위치를 탭하세요.';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.anchor_rounded, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              sub,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -468,38 +529,64 @@ class _BattleshipViewState extends State<BattleshipView> {
         : 0;
     final oppRemaining = BattleshipLogic.remainingShips(oppShots, myBoard);
 
-    final content = SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _turnBanner(myTurn, finished),
-          const SizedBox(height: 16),
-          _sectionLabel(
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 차례 배너: 컴팩트 고정 높이.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: _turnBanner(myTurn, finished),
+        ),
+        // 상대 해역 레이블.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+          child: _sectionLabel(
             '상대 해역  (남은 함선 $myRemaining/${BattleshipLogic.shipSizes.length})',
             G42Colors.bad,
           ),
-          const SizedBox(height: 8),
-          BattleshipGrid(
-            cellAt: (i) => _enemyCellAt(myShots, i),
-            sunkCells: _sunkCellsOnEnemy(myShots, oppBoard),
-            onTap: (myTurn && opp != null)
-                ? (i) => _onFire(i, oppBoard, myShots)
-                : null,
+        ),
+        // 상대 해역 보드: 절반 높이 flex.
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: BattleshipGrid(
+                  cellAt: (i) => _enemyCellAt(myShots, i),
+                  sunkCells: _sunkCellsOnEnemy(myShots, oppBoard),
+                  onTap: (myTurn && opp != null)
+                      ? (i) => _onFire(i, oppBoard, myShots)
+                      : null,
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 20),
-          _sectionLabel(
+        ),
+        // 내 함대 레이블.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+          child: _sectionLabel(
             '내 함대  (남은 함선 $oppRemaining/${BattleshipLogic.shipSizes.length})',
             G42Colors.good,
           ),
-          const SizedBox(height: 8),
-          BattleshipGrid(
-            cellAt: (i) => _myFleetCellAt(myBoard, oppShots, i),
-            sunkCells: _sunkCellsOnMine(oppShots, myBoard),
+        ),
+        // 내 함대 보드: 절반 높이 flex.
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: BattleshipGrid(
+                  cellAt: (i) => _myFleetCellAt(myBoard, oppShots, i),
+                  sunkCells: _sunkCellsOnMine(oppShots, myBoard),
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
-        ],
-      ),
+        ),
+      ],
     );
 
     if (!finished) return content;
@@ -605,12 +692,12 @@ class _BattleshipViewState extends State<BattleshipView> {
         : (myTurn ? '내 차례 — 사격하세요' : '상대 차례 — 대기 중');
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: (myTurn ? color : G42Colors.surface).withValues(
           alpha: myTurn ? 0.22 : 1,
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: myTurn ? color : G42Colors.surfaceHi,
           width: myTurn ? 2 : 1,
@@ -621,48 +708,19 @@ class _BattleshipViewState extends State<BattleshipView> {
           Icon(
             myTurn ? Icons.gps_fixed_rounded : Icons.hourglass_empty_rounded,
             color: myTurn ? color : Colors.white54,
+            size: 18,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: myTurn ? Colors.white : Colors.white60,
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _phaseHeader({
-    required String label,
-    required String sub,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color, width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(sub, style: const TextStyle(color: Colors.white70)),
         ],
       ),
     );

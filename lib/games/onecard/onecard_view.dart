@@ -127,23 +127,23 @@ class _OneCardViewState extends State<OneCardView> {
     );
     final canPlayAny = playable.isNotEmpty;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _turnBanner(myTurn, finished),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           _opponentRow(opp, oppCount),
-          const SizedBox(height: 16),
-          _discardArea(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 6),
+          Expanded(child: Center(child: _discardArea())),
+          const SizedBox(height: 6),
           _drawRow(myTurn: myTurn, canPlayAny: canPlayAny),
-          const SizedBox(height: 20),
+          const SizedBox(height: 6),
           _myHandLabel(myHand.length, playable.length),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           _myHand(myHand, playable, myTurn),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
           _helpButton(context),
         ],
       ),
@@ -167,7 +167,7 @@ class _OneCardViewState extends State<OneCardView> {
         : (_lastAction.isNotEmpty ? '  ·  $_lastAction' : '');
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: (myTurn ? color : G42Colors.surface).withValues(
           alpha: myTurn ? 0.22 : 1,
@@ -213,7 +213,7 @@ class _OneCardViewState extends State<OneCardView> {
   Widget _opponentRow(String? opp, int count) {
     final name = opp != null ? _nameOf(opp) : '상대';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: G42Colors.surface,
         borderRadius: BorderRadius.circular(14),
@@ -335,7 +335,7 @@ class _OneCardViewState extends State<OneCardView> {
         ),
         const SizedBox(width: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: G42Colors.surface,
             borderRadius: BorderRadius.circular(12),
@@ -387,23 +387,33 @@ class _OneCardViewState extends State<OneCardView> {
 
   Widget _myHand(List<String> hand, List<String> playable, bool myTurn) {
     if (hand.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('손패가 비었습니다', style: TextStyle(color: Colors.white54)),
+      return const SizedBox(
+        height: 88,
+        child: Center(
+          child: Text('손패가 비었습니다', style: TextStyle(color: Colors.white54)),
+        ),
       );
     }
     final sorted = List<String>.from(hand)..sort(_cardSort);
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final card in sorted)
-          _handCard(
-            card,
-            highlighted: myTurn && playable.contains(card),
-            enabled: myTurn && playable.contains(card),
-          ),
-      ],
+    return SizedBox(
+      height: 88,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        itemCount: sorted.length,
+        itemBuilder: (context, index) {
+          final card = sorted[index];
+          return Padding(
+            key: ValueKey('hand-$card'),
+            padding: const EdgeInsets.only(right: 6),
+            child: _handCard(
+              card,
+              highlighted: myTurn && playable.contains(card),
+              enabled: myTurn && playable.contains(card),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -441,8 +451,8 @@ class _OneCardViewState extends State<OneCardView> {
   // ---- 카드 얼굴 위젯 -------------------------------------------------------
 
   Widget _cardFace(String card, {bool big = false}) {
-    final w = big ? 76.0 : 56.0;
-    final h = big ? 108.0 : 80.0;
+    final w = big ? 72.0 : 50.0;
+    final h = big ? 104.0 : 74.0;
     final isJoker = OneCardLogic.isJoker(card);
     final suit = OneCardLogic.suitOf(card);
     final rank = OneCardLogic.rankOf(card);
@@ -469,27 +479,39 @@ class _OneCardViewState extends State<OneCardView> {
                       color: color,
                       fontWeight: FontWeight.w900,
                       fontSize: big ? 11 : 8,
+                      height: 1.0,
                     ),
                   ),
                 ],
               ),
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // 좌상단 랭크 · 중앙 무늬 · 우하단 랭크를 Stack 으로 모서리 배치한다.
+          // (Flex Column 의 spaceBetween 은 글리프 높이에 따라 1~2px 오버플로우가
+          //  날 수 있어, 위치 배치인 Stack 으로 어떤 카드든 절대 넘치지 않게 한다.)
+          : Stack(
+              fit: StackFit.expand,
               children: [
-                Text(
-                  rank ?? '',
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w900,
-                    fontSize: big ? 22 : 18,
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Text(
+                    rank ?? '',
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w900,
+                      fontSize: big ? 22 : 18,
+                      height: 1.0,
+                    ),
                   ),
                 ),
-                Center(
+                Align(
+                  alignment: Alignment.center,
                   child: Text(
                     OneCardLogic.suitSymbol(suit ?? 'S'),
-                    style: TextStyle(color: color, fontSize: big ? 30 : 22),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: big ? 30 : 22,
+                      height: 1.0,
+                    ),
                   ),
                 ),
                 Align(
@@ -500,6 +522,7 @@ class _OneCardViewState extends State<OneCardView> {
                       color: color,
                       fontWeight: FontWeight.w900,
                       fontSize: big ? 16 : 12,
+                      height: 1.0,
                     ),
                   ),
                 ),
@@ -814,8 +837,20 @@ class _OneCardViewState extends State<OneCardView> {
     return Center(
       child: TextButton.icon(
         onPressed: () => _showHelp(context),
-        icon: const Icon(Icons.help_outline_rounded, color: Colors.white54),
-        label: const Text('규칙 보기', style: TextStyle(color: Colors.white54)),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          minimumSize: Size.zero,
+        ),
+        icon: const Icon(
+          Icons.help_outline_rounded,
+          size: 16,
+          color: Colors.white54,
+        ),
+        label: const Text(
+          '규칙 보기',
+          style: TextStyle(color: Colors.white54, fontSize: 12),
+        ),
       ),
     );
   }

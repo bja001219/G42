@@ -339,24 +339,38 @@ class _BoggleViewState extends State<BoggleView> {
     final myFound = _foundOf(me);
     final finished = widget.room.status == RoomStatus.finished;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _header(context),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           _currentWordBar(),
-          const SizedBox(height: 12),
-          _grid.length == widget.rules.cellCount
-              ? _board()
-              : const SizedBox.shrink(),
-          const SizedBox(height: 12),
-          if (!finished) _actionButtons(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 6),
+          Expanded(
+            flex: 5,
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: _grid.length == widget.rules.cellCount
+                    ? _board()
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (!finished) _compactActionButtons(),
+          const SizedBox(height: 6),
           _scoreBoard(),
-          const SizedBox(height: 16),
-          _foundList(myFound),
+          const SizedBox(height: 6),
+          Flexible(
+            flex: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 100),
+              child: _foundListScrollable(myFound),
+            ),
+          ),
         ],
       ),
     );
@@ -375,36 +389,36 @@ class _BoggleViewState extends State<BoggleView> {
     final label = widget.session.hotseat ? '${_nameOf(me)} 차례' : '단어를 찾으세요';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color, width: 2),
       ),
       child: Row(
         children: [
           Container(
-            width: 12,
-            height: 12,
+            width: 10,
+            height: 10,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 18,
+                fontSize: 14,
                 fontWeight: FontWeight.w800,
                 color: Colors.white,
               ),
             ),
           ),
-          Icon(Icons.timer_rounded, size: 20, color: timerColor),
-          const SizedBox(width: 6),
+          Icon(Icons.timer_rounded, size: 16, color: timerColor),
+          const SizedBox(width: 4),
           Text(
             '$left초',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 16,
               fontWeight: FontWeight.w900,
               color: timerColor,
             ),
@@ -423,10 +437,10 @@ class _BoggleViewState extends State<BoggleView> {
         : widget.rules.scoreFor(widget.rules.wordFromPath(_grid, _path));
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: G42Colors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: G42Colors.surfaceHi),
       ),
       child: Row(
@@ -435,7 +449,7 @@ class _BoggleViewState extends State<BoggleView> {
             child: Text(
               word,
               style: TextStyle(
-                fontSize: 22,
+                fontSize: 16,
                 letterSpacing: 2,
                 fontWeight: FontWeight.w800,
                 color: _path.isEmpty ? Colors.white38 : Colors.white,
@@ -447,7 +461,7 @@ class _BoggleViewState extends State<BoggleView> {
             Text(
               '+$score',
               style: const TextStyle(
-                fontSize: 18,
+                fontSize: 15,
                 fontWeight: FontWeight.w900,
                 color: G42Colors.good,
               ),
@@ -576,39 +590,43 @@ class _BoggleViewState extends State<BoggleView> {
 
   // ---- 액션 버튼 ------------------------------------------------------------
 
-  Widget _actionButtons() {
+  /// Compact single-row action buttons for the fit-one-screen layout.
+  Widget _compactActionButtons() {
     final over = _isRoundOver;
-    return Column(
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: (over || _path.isEmpty) ? null : _clearPath,
-                icon: const Icon(Icons.backspace_rounded),
-                label: const Text('지우기'),
-              ),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: (over || _path.isEmpty) ? null : _clearPath,
+            icon: const Icon(Icons.backspace_rounded, size: 16),
+            label: const Text('지우기', style: TextStyle(fontSize: 13)),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 6),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 2,
-              child: FilledButton.icon(
-                onPressed: (over || _path.isEmpty) ? null : _submitWord,
-                icon: const Icon(Icons.send_rounded),
-                label: const Text('제출'),
-              ),
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(width: 6),
+        Expanded(
+          flex: 2,
+          child: FilledButton.icon(
+            onPressed: (over || _path.isEmpty) ? null : _submitWord,
+            icon: const Icon(Icons.send_rounded, size: 16),
+            label: const Text('제출', style: TextStyle(fontSize: 13)),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
         OutlinedButton.icon(
           onPressed: over ? null : _onTimeUp,
           style: OutlinedButton.styleFrom(
             foregroundColor: G42Colors.bad,
             side: const BorderSide(color: G42Colors.bad),
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
           ),
-          icon: const Icon(Icons.flag_rounded),
-          label: const Text('끝내기'),
+          icon: const Icon(Icons.flag_rounded, size: 16),
+          label: const Text('끝', style: TextStyle(fontSize: 13)),
         ),
       ],
     );
@@ -637,49 +655,45 @@ class _BoggleViewState extends State<BoggleView> {
         widget.room.status != RoomStatus.finished &&
         !done; // 핫시트: 아직 진행 중인 플레이어 점수는 가린다(상대 화면에 노출 방지)
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: isMe ? color.withValues(alpha: 0.18) : G42Colors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isMe ? color : G42Colors.surfaceHi,
           width: isMe ? 2 : 1,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _nameOf(pid),
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              if (done)
-                const Icon(
-                  Icons.check_circle_rounded,
-                  size: 16,
-                  color: G42Colors.good,
-                ),
-            ],
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              _nameOf(pid),
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          if (done)
+            const Icon(
+              Icons.check_circle_rounded,
+              size: 14,
+              color: G42Colors.good,
+            ),
+          const SizedBox(width: 4),
           Text(
             hideScore ? '••' : '${_scoreOf(pid)}점',
             style: TextStyle(
-              fontSize: 22,
+              fontSize: 15,
               fontWeight: FontWeight.w900,
               color: hideScore ? Colors.white24 : color,
             ),
@@ -689,50 +703,60 @@ class _BoggleViewState extends State<BoggleView> {
     );
   }
 
-  Widget _foundList(List<String> words) {
-    if (words.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('아직 찾은 단어가 없습니다', style: TextStyle(color: Colors.white38)),
-      );
-    }
+  /// Bounded scrollable found-words list for the fit-one-screen layout.
+  /// The outer container is constrained by the caller; this scrolls internally.
+  Widget _foundListScrollable(List<String> words) {
     final sorted = List<String>.from(words)
       ..sort((a, b) => b.length.compareTo(a.length));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           '찾은 단어 ${words.length}개',
           style: const TextStyle(
+            fontSize: 11,
             fontWeight: FontWeight.w700,
             color: Colors.white70,
           ),
         ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final w in sorted)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: G42Colors.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: G42Colors.surfaceHi),
-                ),
-                child: Text(
-                  '${widget.rules.displayWord(w)}  +${widget.rules.scoreFor(w)}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
+        const SizedBox(height: 4),
+        Flexible(
+          child: words.isEmpty
+              ? const Text(
+                  '아직 찾은 단어가 없습니다',
+                  style: TextStyle(fontSize: 11, color: Colors.white38),
+                )
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final w in sorted)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: G42Colors.surface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: G42Colors.surfaceHi),
+                            ),
+                            child: Text(
+                              '${widget.rules.displayWord(w)}  +${widget.rules.scoreFor(w)}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-              ),
-          ],
         ),
       ],
     );
