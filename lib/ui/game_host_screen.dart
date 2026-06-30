@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app.dart';
@@ -34,10 +36,67 @@ class _GameHostScreenState extends State<GameHostScreen> {
   /// 전에 다음 프레임이 또 기록을 시도하는 것을 막는다.
   bool _recordInFlight = false;
 
+  // ---- 결과 오버레이 지연 표시 게이트 ---------------------------------------
+  // 보드게임(오목 등)은 대국이 끝난 직후 승착이 놓인 보드/승리선을 잠깐 보여준 뒤
+  // 결과 오버레이를 띄운다(GameDefinition.resultRevealDelay). 아래는 그 지연을
+  // 관리하는 상태다.
+  Timer? _revealTimer;
+
+  /// 결과 오버레이를 띄워도 되는가(지연이 지났거나 지연 0).
+  bool _resultGateOpen = false;
+
+  /// 이번 '종료' 상태에 대해 게이트를 이미 한 번 처리했는가(매 빌드 재무장 방지).
+  bool _revealArmed = false;
+
+  /// 직전 빌드의 finished&&isFull 여부(null = 첫 빌드). false→true 전이만 '방금 끝남'.
+  bool? _prevFinishedFull;
+
   @override
   void initState() {
     super.initState();
     _startedAt = DateTime.now();
+  }
+
+  @override
+  void dispose() {
+    _revealTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 결과 오버레이 게이트를 룸 상태 전이에 맞춰 갱신한다(빌드 중 호출 — setState는
+  /// 타이머 콜백에서만).
+  ///
+  /// - 진행 중/대기: 게이트를 닫고 타이머를 정리한다(재대국 리셋 포함).
+  /// - 방금 끝남(false→true)이고 [delay]>0: [delay] 뒤 게이트를 연다(그동안 보드 노출).
+  /// - 중도 합류(첫 빌드부터 finished)나 [delay]==0: 즉시 연다.
+  void _handleRevealGate(bool finishedFull, Duration delay) {
+    final prev = _prevFinishedFull;
+    _prevFinishedFull = finishedFull;
+
+    if (!finishedFull) {
+      if (_revealArmed || _resultGateOpen || _revealTimer != null) {
+        _revealTimer?.cancel();
+        _revealTimer = null;
+        _resultGateOpen = false;
+        _revealArmed = false;
+      }
+      return;
+    }
+
+    if (_revealArmed) return; // 이번 종료는 이미 처리됨.
+    _revealArmed = true;
+
+    final justFinished = prev == false; // 직전 빌드는 비-종료였다.
+    if (justFinished && delay > Duration.zero) {
+      _resultGateOpen = false;
+      _revealTimer?.cancel();
+      _revealTimer = Timer(delay, () {
+        if (mounted) setState(() => _resultGateOpen = true);
+      });
+    } else {
+      // 중도 합류(prev==null) 또는 지연 0: 즉시 표시.
+      _resultGateOpen = true;
+    }
   }
 
   /// 라운드 종료 시 전적을 게임 무관하게 중앙에서 1회 기록한다(§B).
@@ -246,6 +305,15 @@ class _GameHostScreenState extends State<GameHostScreen> {
                   ? null
                   : GameRegistry.byId(room.gameId);
 
+              // 결과 오버레이 지연 게이트 갱신: 오목 등은 승착/승리선을 잠깐 보여준 뒤
+              // 결과를 띄운다. (지연 0이거나 중도 합류면 즉시.)
+              final finishedFull =
+                  room.status == RoomStatus.finished && room.isFull;
+              _handleRevealGate(
+                finishedFull,
+                game?.resultRevealDelay(room) ?? Duration.zero,
+              );
+
               // 고스톱처럼 가로로 진행하는 게임이면 화면을 가로로 눕힌다.
               // (LandscapeLock 을 트리에 항상 두어 enabled 변화가 didUpdateWidget
               //  으로 반영되게 한다 — 게임 종료/선택 화면으로 돌아가면 세로 복귀.)
@@ -263,8 +331,9 @@ class _GameHostScreenState extends State<GameHostScreen> {
                           ],
                         ),
                         // 정상 종료(둘 다 남아있음)면 통합 결과/프롬프트 풀 오버레이로
-                        // 게임 위젯의 자체 결과/재대국 UI를 덮는다.
-                        if (room.status == RoomStatus.finished && room.isFull)
+                        // 게임 위젯의 자체 결과/재대국 UI를 덮는다. 단, 게임이 요청한
+                        // 지연(승착 노출)이 지나 게이트가 열린 뒤에만 띄운다.
+                        if (finishedFull && _resultGateOpen)
                           _resultOverlay(context, room),
                       ],
                     );

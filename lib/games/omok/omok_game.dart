@@ -26,6 +26,14 @@ class OmokGame extends GameDefinition {
   @override
   List<Color> get gradient => const [Color(0xFFE8A87C), Color(0xFFC38D5F)];
 
+  /// 승리로 끝나면 승착/승리선을 잠깐 보여준 뒤 결과를 띄운다(무승부는 즉시).
+  @override
+  Duration resultRevealDelay(Room room) {
+    final w = room.winner;
+    final isWin = w != null && w.isNotEmpty && w != 'draw';
+    return isWin ? kOmokResultRevealDelay : Duration.zero;
+  }
+
   @override
   Map<String, dynamic> createInitialState(List<String> playerIds) => {
     'board': emptyOmokBoard(),

@@ -7,6 +7,12 @@ library;
 const int kOmokSize = 15;
 const int kOmokCells = kOmokSize * kOmokSize;
 
+/// 승리로 대국이 끝난 뒤 결과 화면을 띄우기까지의 지연.
+///
+/// 이 동안 승착이 놓인 보드와 승리선(금색 링)이 그대로 보이므로, 진 쪽도
+/// "상대가 어떻게 이겼는지"를 확인할 수 있다. 무승부는 볼 승리선이 없어 즉시 표시한다.
+const Duration kOmokResultRevealDelay = Duration(seconds: 5);
+
 /// 빈 보드 문자열.
 String emptyOmokBoard() => '.' * kOmokCells;
 

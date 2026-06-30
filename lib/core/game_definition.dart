@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'game_session.dart';
+import 'models/room.dart';
 
 /// 게임 하나를 정의하는 추상 클래스.
 ///
@@ -41,6 +42,13 @@ abstract class GameDefinition {
   /// (고스톱 등 카드/테이블 게임). 기본은 세로(false). 다른 게임도 이 게터를
   /// true 로 오버라이드하면 한 줄로 가로 모드를 켤 수 있다.
   bool get prefersLandscape => false;
+
+  /// 대국이 끝난 뒤 [GameHostScreen]이 통합 결과 오버레이를 띄우기까지의 지연.
+  ///
+  /// 기본은 0(즉시). 보드게임(오목 등)은 양수를 돌려줘서 승착이 놓인 보드와 승리선을
+  /// 잠깐 보여준 뒤 결과를 띄운다 — 진 쪽이 "어떻게 졌는지" 확인할 수 있도록.
+  /// [room]을 받으므로 승부 결과별로 다르게 줄 수 있다(예: 무승부는 즉시).
+  Duration resultRevealDelay(Room room) => Duration.zero;
 
   // ---- 시작 전 방장 설정(옵션) -------------------------------------------------
   // 게임에 따라 시작 전 방장이 옵션을 고를 수 있다(예: 보글의 보드 크기/언어).

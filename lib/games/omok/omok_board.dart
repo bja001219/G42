@@ -39,7 +39,9 @@ class _OmokBoardState extends State<OmokBoard> {
   Timer? _revealTimer;
 
   /// 승착을 보여준 뒤 결과 박스가 나타나기까지의 지연.
-  static const _winRevealDelay = Duration(milliseconds: 1400);
+  /// 호스트의 통합 결과 오버레이와 같은 지연을 써서, 그 전까지 보드/승리선만 깔끔히
+  /// 보이도록 한다(둘 다 같은 시점에 떠 인라인 박스는 풀 오버레이에 가려진다).
+  static const _winRevealDelay = kOmokResultRevealDelay;
 
   GameSession get _session => widget.session;
   Room get _room => widget.room;
@@ -73,9 +75,12 @@ class _OmokBoardState extends State<OmokBoard> {
       // 방금 대국이 끝났다 — 양쪽 클라이언트가 같은 finished 스냅샷을 받으므로
       // 로컬 타이머 지연도 양쪽에서 동일하게 동작한다.
       _winLine = _computeWinLine();
+      // 호스트 통합 오버레이의 지연 기준(OmokGame.resultRevealDelay)과 '똑같은'
+      // 조건(무승부가 아닌 승부)을 쓴다. 둘이 어긋나면(예: 승리선 계산이 빈 값)
+      // 인라인 박스만 먼저 떠 재대국 버튼이 노출될 수 있으므로 기준을 일치시킨다.
       final isWinFinish = _room.winner != null &&
-          _room.winner != 'draw' &&
-          (_winLine?.isNotEmpty ?? false);
+          _room.winner!.isNotEmpty &&
+          _room.winner != 'draw';
       if (isWinFinish) {
         _resultRevealed = false; // 먼저 승착이 놓인 보드를 보여준다.
         _revealTimer?.cancel();
@@ -149,7 +154,14 @@ class _OmokBoardState extends State<OmokBoard> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _StatusBar(session: _session, room: _room),
+        _StatusBar(
+          session: _session,
+          room: _room,
+          // 승부가 났지만 아직 결과 박스 전(승착 노출 구간)이면 승리선을 보라고 안내.
+          resultPending: _room.status == RoomStatus.finished &&
+              !_resultRevealed &&
+              (_winLine?.isNotEmpty ?? false),
+        ),
         const SizedBox(height: 12),
         Expanded(
           child: Center(
@@ -202,7 +214,14 @@ class _StatusBar extends StatelessWidget {
   final GameSession session;
   final Room room;
 
-  const _StatusBar({required this.session, required this.room});
+  /// 승부가 결정됐지만 아직 결과 박스 전(승착/승리선 노출 구간)이면 true.
+  final bool resultPending;
+
+  const _StatusBar({
+    required this.session,
+    required this.room,
+    this.resultPending = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +240,9 @@ class _StatusBar extends StatelessWidget {
         color: G42Colors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: myTurn ? G42Colors.accent : Colors.transparent,
+          color: resultPending
+              ? G42Colors.warn
+              : (myTurn ? G42Colors.accent : Colors.transparent),
           width: 2,
         ),
       ),
@@ -240,7 +261,7 @@ class _StatusBar extends StatelessWidget {
           Expanded(
             child: Text(
               room.status == RoomStatus.finished
-                  ? '대국 종료'
+                  ? (resultPending ? '대국 종료 · 승리선을 확인하세요' : '대국 종료')
                   : '$label 차례'
                         '${turnPlayer != null ? ' · ${turnPlayer.name}' : ''}',
               style: const TextStyle(
