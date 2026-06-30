@@ -4,6 +4,7 @@ import 'blackjack/blackjack_game.dart';
 import 'boggle/boggle_game.dart';
 import 'chess/chess_game.dart';
 import 'gostop/gostop_game.dart';
+import 'minesweeper/minesweeper_game.dart';
 import 'omok/omok_game.dart';
 import 'onecard/onecard_game.dart';
 import 'reaction/reaction_game.dart';
@@ -23,4 +24,6 @@ final List<GameDefinition> builtInGames = <GameDefinition>[
   const BoggleGame(),
   GoStopGame(),
   TetrisGame(),
+  // 지뢰찾기: 둘이서 같은 보드를 함께 푸는 협동. 난이도는 방장이 시작 전 선택.
+  MinesweeperGame(),
 ];
