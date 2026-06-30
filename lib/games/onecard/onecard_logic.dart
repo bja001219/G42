@@ -22,7 +22,8 @@ import 'dart:math';
 ///   - `A` 공격 → A · 조커로 받아침.
 ///   - 조커 공격 → 조커로만 받아침. **예외: 스페이드 A로 막으면 무효(드로우 없음).**
 /// - `7`  무늬 변경(와일드): 낼 때 원하는 무늬를 지정한다.
-///   조커도 무늬가 없으므로 낼 때 이어갈 무늬를 지정한다.
+/// - 조커: 무늬를 고르지 않는다. 컬러조커(빨강) 위에는 **아무 카드나**, 흑백조커(검정)
+///   위에는 **검은 무늬(스페이드/클로버)만** 낼 수 있다.
 /// - 드로우 더미 소진 시 버린 더미를 섞어 재활용한다(유한 1팩: 52 + 조커 2 = 54장).
 /// - 손패를 먼저 비우면 승리.
 abstract class OneCardLogic {
@@ -62,6 +63,12 @@ abstract class OneCardLogic {
 
   /// 조커 공격을 무효화할 수 있는 특수 방어 카드(스페이드 A).
   static const String spadeAce = 'SA';
+
+  /// 활성 무늬 특수값: 컬러조커(빨강) 위에는 **아무 카드나** 낼 수 있다.
+  static const String suitAny = 'ANY';
+
+  /// 활성 무늬 특수값: 흑백조커(검정) 위에는 **검은 무늬(스페이드/클로버)만** 낼 수 있다.
+  static const String suitBlack = 'BLACK';
 
   /// 처음 나눠줄 손패 장수.
   static const int handSize = 7;
@@ -127,6 +134,14 @@ abstract class OneCardLogic {
 
     // 평시: 조커는 언제든 낼 수 있다(공격 개시).
     if (isJoker(card)) return true;
+
+    // 조커가 깐 특수 활성 무늬.
+    if (activeSuit == suitAny) return true; // 컬러조커 위: 아무거나.
+    if (activeSuit == suitBlack) {
+      // 흑백조커 위: 검은 무늬(스페이드/클로버)만.
+      final s = suitOf(card);
+      return s == 'S' || s == 'C';
+    }
 
     // 무늬 또는 랭크 일치.
     if (suitOf(card) == activeSuit) return true;

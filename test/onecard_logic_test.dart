@@ -286,6 +286,86 @@ void main() {
     });
   });
 
+  group('조커 활성 무늬 (컬러=아무거나 / 흑백=검은 무늬)', () {
+    test('컬러조커 위(ANY)에는 어떤 카드든 낼 수 있다', () {
+      for (final c in ['H3', 'D10', 'S7', 'CK', 'SA', 'H2']) {
+        expect(
+          OneCardLogic.canPlay(
+            c,
+            topCard: 'JR',
+            activeSuit: OneCardLogic.suitAny,
+          ),
+          true,
+          reason: '$c 는 컬러조커 위에 낼 수 있어야 한다',
+        );
+      }
+    });
+
+    test('흑백조커 위(BLACK)에는 검은 무늬(♠/♣)만 낼 수 있다', () {
+      expect(
+        OneCardLogic.canPlay(
+          'S9',
+          topCard: 'JB',
+          activeSuit: OneCardLogic.suitBlack,
+        ),
+        true,
+      );
+      expect(
+        OneCardLogic.canPlay(
+          'CK',
+          topCard: 'JB',
+          activeSuit: OneCardLogic.suitBlack,
+        ),
+        true,
+      );
+      expect(
+        OneCardLogic.canPlay(
+          'H9',
+          topCard: 'JB',
+          activeSuit: OneCardLogic.suitBlack,
+        ),
+        false,
+      );
+      expect(
+        OneCardLogic.canPlay(
+          'D3',
+          topCard: 'JB',
+          activeSuit: OneCardLogic.suitBlack,
+        ),
+        false,
+      );
+    });
+
+    test('조커는 어떤 활성 무늬 위에도 낼 수 있다(평시 와일드)', () {
+      expect(
+        OneCardLogic.canPlay(
+          'JB',
+          topCard: 'JR',
+          activeSuit: OneCardLogic.suitAny,
+        ),
+        true,
+      );
+      expect(
+        OneCardLogic.canPlay(
+          'JR',
+          topCard: 'JB',
+          activeSuit: OneCardLogic.suitBlack,
+        ),
+        true,
+      );
+    });
+
+    test('playableCards: 흑백조커 위에선 검은 무늬와 조커만', () {
+      final hand = ['H9', 'S2', 'D5', 'CK', 'JR'];
+      final playable = OneCardLogic.playableCards(
+        hand,
+        topCard: 'JB',
+        activeSuit: OneCardLogic.suitBlack,
+      );
+      expect(playable.toSet(), {'S2', 'CK', 'JR'});
+    });
+  });
+
   group('드로우 / 재활용', () {
     test('충분한 덱에서 정상 뽑기', () {
       final deck = ['C3', 'D4', 'S5', 'H6'];

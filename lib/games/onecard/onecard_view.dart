@@ -284,27 +284,70 @@ class _OneCardViewState extends State<OneCardView> {
           children: [
             const Text('현재 무늬', style: TextStyle(color: Colors.white54)),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                Text(
-                  OneCardLogic.suitSymbol(activeSuit),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: _suitColor(activeSuit),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  OneCardLogic.suitName(activeSuit),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+            _activeSuitDisplay(activeSuit),
           ],
+        ),
+      ],
+    );
+  }
+
+  /// 현재 활성 무늬 표시. 컬러조커(ANY)/흑백조커(BLACK) 특수값도 사람이 읽기 쉽게.
+  Widget _activeSuitDisplay(String activeSuit) {
+    if (activeSuit == OneCardLogic.suitAny) {
+      return const Row(
+        children: [
+          Text(
+            '★',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: G42Colors.warn,
+            ),
+          ),
+          SizedBox(width: 6),
+          Text(
+            '아무거나',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          ),
+        ],
+      );
+    }
+    if (activeSuit == OneCardLogic.suitBlack) {
+      return const Row(
+        children: [
+          Text(
+            '♠♣',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(width: 6),
+          Text(
+            '스페이드/클로버',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          ),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Text(
+          OneCardLogic.suitSymbol(activeSuit),
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w900,
+            color: _suitColor(activeSuit),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          OneCardLogic.suitName(activeSuit),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ],
     );
@@ -327,14 +370,22 @@ class _OneCardViewState extends State<OneCardView> {
           child: FilledButton.icon(
             onPressed: myTurn ? _onDraw : null,
             style: FilledButton.styleFrom(
-              backgroundColor: pending > 0
-                  ? G42Colors.bad
-                  : G42Colors.surfaceHi,
+              backgroundColor: pending > 0 ? G42Colors.bad : G42Colors.accent,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: G42Colors.surfaceHi,
+              disabledForegroundColor: Colors.white38,
+              elevation: myTurn ? 3 : 0,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              textStyle: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
             ),
             icon: Icon(
               pending > 0
                   ? Icons.file_download_rounded
                   : Icons.add_card_rounded,
+              size: 22,
             ),
             label: Text(label),
           ),
@@ -566,13 +617,12 @@ class _OneCardViewState extends State<OneCardView> {
     final defendsJoker =
         _pending > 0 && _attackKind == 'joker' && card == OneCardLogic.spadeAce;
 
-    // 와일드(7 무늬 변경 · 조커)면 이어갈 무늬를 직접 고른다.
-    // 조커는 무늬가 없으므로 반드시 새 무늬를 지정해야 다음 차례가 이어진다.
+    // 7(무늬 변경)만 낼 때 무늬를 직접 고른다. 조커는 무늬를 고르지 않고 색에 따라
+    // 활성 무늬가 자동으로 정해진다(컬러조커=아무거나, 흑백조커=검은 무늬).
     // (스페이드 A 방어는 무늬가 스페이드로 정해져 선택하지 않는다.)
-    final isWild = !defendsJoker &&
-        (OneCardLogic.isWildSuit(card) || OneCardLogic.isJoker(card));
+    final needsSuitPick = !defendsJoker && OneCardLogic.isWildSuit(card);
     String chosenSuit = OneCardLogic.suitOf(card) ?? _activeSuit;
-    if (isWild) {
+    if (needsSuitPick) {
       final picked = await _pickSuit(context);
       if (picked == null) return; // 취소.
       chosenSuit = picked;
@@ -590,10 +640,20 @@ class _OneCardViewState extends State<OneCardView> {
     state['discard'] = discard;
     state['discardTop'] = card;
 
-    // 무늬 갱신: 스페이드 A 방어는 스페이드, 와일드(7·조커)는 선택 무늬, 그 외는 카드 무늬.
-    state['activeSuit'] = defendsJoker
-        ? 'S'
-        : (isWild ? chosenSuit : OneCardLogic.suitOf(card));
+    // 활성 무늬 갱신.
+    final String nextActiveSuit;
+    if (defendsJoker) {
+      nextActiveSuit = 'S'; // 스페이드 A 방어 → 스페이드.
+    } else if (card == OneCardLogic.jokerRed) {
+      nextActiveSuit = OneCardLogic.suitAny; // 컬러조커 위: 아무거나.
+    } else if (card == OneCardLogic.jokerBlack) {
+      nextActiveSuit = OneCardLogic.suitBlack; // 흑백조커 위: 스페이드/클로버.
+    } else if (needsSuitPick) {
+      nextActiveSuit = chosenSuit; // 7: 선택 무늬.
+    } else {
+      nextActiveSuit = OneCardLogic.suitOf(card) ?? _activeSuit; // 일반 카드.
+    }
+    state['activeSuit'] = nextActiveSuit;
 
     // 공격 누적 / 방어.
     final int nextPending;
@@ -629,7 +689,7 @@ class _OneCardViewState extends State<OneCardView> {
       card,
       defendsJoker ? 0 : OneCardLogic.attackValue(card),
       defendsJoker,
-      isWild ? chosenSuit : null,
+      needsSuitPick ? chosenSuit : null,
     );
     // A는 더 이상 스킵이 아니라 공격 카드 → 항상 상대 차례로 넘어간다.
     await widget.session.submit(state, nextTurn: opp);
@@ -907,7 +967,8 @@ class _OneCardViewState extends State<OneCardView> {
                 _rule(
                   '조커 (공격 · 와일드)',
                   '흑백조커(검정) = 상대 5장, 컬러조커(빨강) = 상대 7장. '
-                      '무늬가 없으므로 낼 때 이어갈 무늬를 직접 지정합니다. '
+                      '무늬는 고르지 않습니다 — 컬러조커 위에는 아무 카드나, '
+                      '흑백조커 위에는 검은 무늬(♠/♣)만 낼 수 있습니다. '
                       '조커 공격은 조커로만 받아칠 수 있고, '
                       '예외로 스페이드 A를 내면 조커 공격을 무효로 막습니다.',
                 )
