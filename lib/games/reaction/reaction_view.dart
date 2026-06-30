@@ -229,15 +229,20 @@ class _ReactionViewState extends State<ReactionView> {
     _localRecorded = true;
     _ticker?.cancel();
 
-    final state = _freshState();
-    final reaction = state['reaction'] as Map<String, dynamic>;
-    reaction[recorder] = ms;
-
     if (widget.session.hotseat) {
+      // 핫시트는 한 기기에서 순차 측정 → 경쟁이 없으므로 전체 state 제출.
+      final state = _freshState();
+      (state['reaction'] as Map<String, dynamic>)[recorder] = ms;
       _handleHotseatRecord(state, recorder);
     } else {
-      widget.session.submit(state);
-      // 제출 후 didUpdateWidget에서 양쪽 기록 확인 → 판정.
+      // 온라인: 내 좌석 칸만 점(dotted) 패치로 기록한다.
+      // (기존엔 전체 state를 통째로 submit 했는데, 두 명이 거의 동시에 탭하면
+      //  각자 상대 기록이 0인 stale state를 써 보내 서로를 덮어써서(clobber)
+      //  reaction 한쪽이 영영 0으로 남아 라운드 판정이 무한 대기에 빠졌다.)
+      //  dotted 키는 Firestore의 중첩 필드 업데이트/로컬 applyPatch 모두 해당
+      //  칸만 머지하므로 양쪽 반응시간이 보존되어 호스트가 정상 판정한다.
+      widget.session.patch({'state.reaction.$recorder': ms});
+      // 제출 후 didUpdateWidget에서 양쪽 기록 확인 → 호스트가 판정.
       setState(() {});
     }
   }

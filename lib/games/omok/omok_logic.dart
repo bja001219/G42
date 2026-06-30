@@ -40,9 +40,17 @@ bool isBoardFull(String board) => !board.contains('.');
 /// 방금 [lastIndex]에 [stone]을 둔 결과로 5목(이상)이 완성됐는지.
 ///
 /// 가로/세로/두 대각선 4방향을 검사한다. 자유 5목이므로 6목 이상도 승리로 본다.
-bool isWin(String board, int lastIndex, String stone) {
-  if (lastIndex < 0 || lastIndex >= kOmokCells) return false;
-  if (board[lastIndex] != stone) return false;
+bool isWin(String board, int lastIndex, String stone) =>
+    winningLine(board, lastIndex, stone).isNotEmpty;
+
+/// 방금 [lastIndex]에 [stone]을 둬서 완성된 5목(이상)을 이루는 칸들의 index 목록.
+///
+/// 승리가 아니면 빈 리스트. 장목(6목 이상)이면 연속된 칸을 모두 포함한다.
+/// 가장 먼저 발견된 방향(가로→세로→대각)의 연속 줄을 정렬해 반환한다.
+/// 결과 화면에서 "어디로 이겼는지" 승리선을 강조 표시하는 데 쓴다.
+List<int> winningLine(String board, int lastIndex, String stone) {
+  if (lastIndex < 0 || lastIndex >= kOmokCells) return const [];
+  if (board[lastIndex] != stone) return const [];
 
   final row = omokRow(lastIndex);
   final col = omokCol(lastIndex);
@@ -58,13 +66,13 @@ bool isWin(String board, int lastIndex, String stone) {
   for (final d in dirs) {
     final dr = d[0];
     final dc = d[1];
-    var count = 1; // 방금 둔 돌 포함.
+    final line = <int>[lastIndex]; // 방금 둔 돌 포함.
 
     // 정방향으로 연속 카운트.
     var r = row + dr;
     var c = col + dc;
     while (_inside(r, c) && board[omokIndex(r, c)] == stone) {
-      count++;
+      line.add(omokIndex(r, c));
       r += dr;
       c += dc;
     }
@@ -73,15 +81,18 @@ bool isWin(String board, int lastIndex, String stone) {
     r = row - dr;
     c = col - dc;
     while (_inside(r, c) && board[omokIndex(r, c)] == stone) {
-      count++;
+      line.add(omokIndex(r, c));
       r -= dr;
       c -= dc;
     }
 
-    if (count >= 5) return true;
+    if (line.length >= 5) {
+      line.sort();
+      return line;
+    }
   }
 
-  return false;
+  return const [];
 }
 
 /// seat 0(호스트) → 흑('B'), seat 1(게스트) → 백('W').

@@ -106,8 +106,30 @@ class _BoggleViewState extends State<BoggleView> {
   @override
   void didUpdateWidget(covariant BoggleView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _maybeResetForRematch(oldWidget);
     _maybeHandleHotseatTurnChange();
     _maybeBeginRound();
+    // 온라인: 두 done 이 모두 반영된 스냅샷에서 호스트가 종료를 확정한다.
+    _maybeFinalize();
+  }
+
+  /// 온라인 재대국: status 가 finished→playing 으로 바뀌면, 재대국 버튼을 누르지
+  /// 않은 상대 클라이언트도 라운드 로컬 상태를 리셋해야 새 판이 정상 시작된다.
+  /// (안 그러면 _started/_submittedDone 가 이전 판 값으로 남아 _maybeBeginRound 가
+  ///  `if (_started) return` 에 걸려 타이머가 영영 시작되지 않는다.)
+  /// 핫시트는 hsTurn 전환 처리(_maybeHandleHotseatTurnChange)에서 이미 리셋된다.
+  void _maybeResetForRematch(BoggleView oldWidget) {
+    if (widget.session.hotseat) return;
+    final was = oldWidget.room.status;
+    final now = widget.room.status;
+    if (was == RoomStatus.finished && now != RoomStatus.finished) {
+      _stopTimer();
+      _path.clear();
+      _started = false;
+      _submittedDone = false;
+      _secondsLeft = null;
+      _curtain = false;
+    }
   }
 
   /// 핫시트에서 차례(hsTurn)가 바뀌면 가림막을 올리고 로컬 상태를 리셋한다.
@@ -182,36 +204,56 @@ class _BoggleViewState extends State<BoggleView> {
     _stopTimer();
 
     final me = _me;
-    final state = _freshState();
-    final done = Map<String, dynamic>.from(state['done'] as Map);
-    done[me] = true;
-    state['done'] = done;
-
     final ids = widget.room.playerIds;
-    final everyoneDone =
-        ids.isNotEmpty && ids.every((p) => _resolvedDone(done, p));
 
-    if (everyoneDone) {
-      _finishGame(state);
+    if (widget.session.hotseat) {
+      // 핫시트: 한 기기 순차 진행 — 경쟁이 없으므로 전체 state 제출.
+      final state = _freshState();
+      final done = Map<String, dynamic>.from(state['done'] as Map);
+      done[me] = true;
+      state['done'] = done;
+      final everyoneDone =
+          ids.isNotEmpty && ids.every((p) => _resolvedDone(done, p));
+      if (everyoneDone) {
+        _finishGame(state);
+      } else {
+        // 다음(아직 안 끝낸) 플레이어에게 차례를 넘긴다.
+        final next = ids.firstWhere(
+          (p) => !_resolvedDone(done, p),
+          orElse: () => me,
+        );
+        state['hsTurn'] = next;
+        widget.session.submit(state, nextTurn: next);
+      }
       return;
     }
 
-    if (widget.session.hotseat) {
-      // 다음(아직 안 끝낸) 플레이어에게 차례를 넘긴다.
-      final next = ids.firstWhere(
-        (p) => !_resolvedDone(done, p),
-        orElse: () => me,
-      );
-      state['hsTurn'] = next;
-      widget.session.submit(state, nextTurn: next);
-    } else {
-      // 온라인: 내 done만 반영하고 상대 타이머 종료를 기다린다.
-      widget.session.submit(state);
-    }
+    // 온라인: 내 done 칸만 점(dotted) 패치로 기록한다(상대 done/점수 보존).
+    // 종료 확정(둘 다 done → finished)은 _maybeFinalize 에서 호스트가 처리한다.
+    // (기존엔 전체 state를 submit 해, 두 명이 동시에 끝나면 서로의 done 을 덮어써
+    //  아무도 종료를 확정하지 못하고 양쪽이 무한 대기에 빠졌다.)
+    widget.session.patch({'state.done.$me': true});
+    setState(() {});
+    _maybeFinalize();
   }
 
   bool _resolvedDone(Map<String, dynamic> done, String pid) =>
       (done[pid] as bool?) ?? false;
+
+  /// 온라인 종료 확정: 둘 다 끝났으면 **호스트**가 한 번 결과를 확정한다.
+  /// 매 상태 갱신(didUpdateWidget)마다 호출되어, 두 명이 동시에 끝나도(각자
+  /// _onTimeUp 시점엔 상대 done 이 아직 안 보여 확정 못 해도) 두 done 이 모두
+  /// 반영된 스냅샷에서 호스트가 멱등하게 종료시킨다. 게스트는 status=finished
+  /// 를 받아 같은 room.state 로 결과를 그린다(양쪽 대칭).
+  void _maybeFinalize() {
+    if (widget.session.hotseat) return;
+    if (widget.room.status == RoomStatus.finished) return;
+    final ids = widget.room.playerIds;
+    if (ids.length < 2) return;
+    if (!ids.every(_doneOf)) return; // 아직 둘 다 끝나지 않음.
+    if (widget.session.myPlayerId != ids.first) return; // 호스트만 확정.
+    _finishGame(_freshState());
+  }
 
   void _finishGame(Map<String, dynamic> state) {
     final ids = widget.room.playerIds;
@@ -280,20 +322,17 @@ class _BoggleViewState extends State<BoggleView> {
       return;
     }
 
-    // 내 키(found/scores)만 바꿔 최신 state로 통째로 submit.
-    final state = _freshState();
-    final allFound = Map<String, dynamic>.from(state['found'] as Map);
-    final myList = List<String>.from((allFound[me] as List?) ?? const []);
-    myList.add(word);
-    allFound[me] = myList;
-    state['found'] = allFound;
-
-    final allScores = Map<String, dynamic>.from(state['scores'] as Map);
-    allScores[me] =
-        ((allScores[me] as num?)?.toInt() ?? 0) + widget.rules.scoreFor(word);
-    state['scores'] = allScores;
-
-    widget.session.submit(state);
+    // 내 found/scores 칸만 점(dotted) 패치로 갱신한다.
+    // (기존엔 전체 state를 통째로 submit 했는데, 두 명이 거의 동시에 단어를 제출하면
+    //  각자 상대 점수가 반영 안 된 stale state를 써 보내 서로의 단어/점수를
+    //  덮어써서(clobber) 최종 결과가 어긋났다. dotted 키는 해당 플레이어 칸만
+    //  머지하므로 상대 기록이 보존된다.)
+    final myList = List<String>.from(_foundOf(me))..add(word);
+    final myScore = _scoreOf(me) + widget.rules.scoreFor(word);
+    widget.session.patch({
+      'state.found.$me': myList,
+      'state.scores.$me': myScore,
+    });
     setState(() => _path.clear());
     _toast(
       '+${widget.rules.scoreFor(word)}  ${widget.rules.displayWord(word)}',
@@ -926,6 +965,9 @@ class _BoggleViewState extends State<BoggleView> {
     final s = widget.room.state;
     return {
       'grid': (s['grid'] as String?) ?? '',
+      // config(크기/언어)를 보존해야 종료/핫시트 전체 제출이 글자판 설정을 지우지 않는다.
+      // (지우면 결과 화면 배경 보드가 사라지고 재대국이 기본값(8×8 한글)로 바뀐다.)
+      'config': Map<String, dynamic>.from(s['config'] as Map? ?? const {}),
       'phase': (s['phase'] as String?) ?? 'playing',
       'found': Map<String, dynamic>.from(s['found'] as Map? ?? {}),
       'scores': Map<String, dynamic>.from(s['scores'] as Map? ?? {}),

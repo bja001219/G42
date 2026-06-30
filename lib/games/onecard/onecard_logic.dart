@@ -12,14 +12,18 @@ import 'dart:math';
 /// ## 고정 규칙 (인게임 도움말과 동일)
 /// - 각자 7장 시작. 버린 더미 맨 위 카드와 **무늬 또는 랭크**가 같으면 낼 수 있다.
 /// - 못 내면 1장 뽑고 턴 종료.
-/// - 특수카드:
-///   - `2`  공격: 다음 사람 2장 뽑기. 다음 사람이 `2`를 내면 누적(4,6...).
-///           못 막으면 누적 장수를 뽑고 턴 종료.
-///   - `A`  스킵: 상대 턴 건너뜀(2인이라 낸 사람이 한 번 더 둔다).
-///   - `7`  무늬 변경(와일드): 낼 때 원하는 무늬를 지정한다.
-///   - 조커(옵션): 공격 +5. 조커는 조커로만 방어(2와 혼합 누적 금지).
-///   - 그 외(3,4,5,6,8,9,10,J,Q,K): 일반.
-/// - 드로우 더미 소진 시 버린 더미(맨 위 제외)를 섞어 재활용한다.
+/// - 공격 카드(상대가 받아치지 못하면 누적 장수만큼 뽑고 턴 종료):
+///   - `2`         상대 2장.
+///   - `A`         상대 3장.
+///   - 흑백조커(JB)  상대 5장.
+///   - 컬러조커(JR)  상대 7장.
+/// - 받아치기(누적): **같은 티어 이상**으로만 받아칠 수 있다(티어: 2 < A < 조커).
+///   - `2` 공격 → 2 · A · 조커로 받아침.
+///   - `A` 공격 → A · 조커로 받아침.
+///   - 조커 공격 → 조커로만 받아침. **예외: 스페이드 A로 막으면 무효(드로우 없음).**
+/// - `7`  무늬 변경(와일드): 낼 때 원하는 무늬를 지정한다.
+///   조커도 무늬가 없으므로 낼 때 이어갈 무늬를 지정한다.
+/// - 드로우 더미 소진 시 버린 더미를 섞어 재활용한다(유한 1팩: 52 + 조커 2 = 54장).
 /// - 손패를 먼저 비우면 승리.
 abstract class OneCardLogic {
   static const List<String> suits = ['S', 'H', 'D', 'C'];
@@ -44,11 +48,20 @@ abstract class OneCardLogic {
   static const String jokerRed = 'JR';
   static const String jokerBlack = 'JB';
 
-  /// 조커 한 장이 가하는 공격 누적량.
-  static const int jokerAttack = 5;
+  /// 흑백조커(검정 JB)가 가하는 공격 누적량.
+  static const int jokerBlackAttack = 5;
+
+  /// 컬러조커(빨강 JR)가 가하는 공격 누적량.
+  static const int jokerRedAttack = 7;
+
+  /// 에이스(A)가 가하는 공격 누적량.
+  static const int aceAttack = 3;
 
   /// 일반 공격 카드(2)가 가하는 누적량.
   static const int twoAttack = 2;
+
+  /// 조커 공격을 무효화할 수 있는 특수 방어 카드(스페이드 A).
+  static const String spadeAce = 'SA';
 
   /// 처음 나눠줄 손패 장수.
   static const int handSize = 7;
@@ -91,10 +104,11 @@ abstract class OneCardLogic {
   /// - [activeSuit]: 현재 유효 무늬(7로 바뀌었을 수 있음). 보통 topCard의 무늬.
   /// - [pending]: 현재 누적된 공격 장수(0이면 공격 없음).
   ///
-  /// ### 공격 중(pending > 0) 방어 규칙
-  /// - 직전 공격이 일반(2) 누적이면: `2`로만 막을 수 있다.
-  /// - 직전 공격이 조커면: 조커로만 막을 수 있다.
-  /// - 둘을 혼합 누적할 수 없다([attackKind]로 구분).
+  /// ### 공격 중(pending > 0) 방어/받아치기 규칙
+  /// - 진행 중인 공격과 **같은 티어 이상**으로만 받아칠 수 있다(티어: 2 < A < 조커).
+  ///   예) 2 공격은 2·A·조커로, A 공격은 A·조커로, 조커 공격은 조커로 받아친다.
+  /// - 예외: 조커 공격은 **스페이드 A**로 막을 수 있다(받아치기 위계 무시).
+  ///   스페이드 A 방어 시 누적을 무효화(드로우 없음)하는 처리는 호출부(뷰)에서 한다.
   static bool canPlay(
     String card, {
     required String topCard,
@@ -103,12 +117,12 @@ abstract class OneCardLogic {
     String attackKind = '',
   }) {
     if (pending > 0) {
-      // 방어만 가능.
-      if (attackKind == 'joker') {
-        return isJoker(card);
-      }
-      // 'two' 공격 진행 중: 2로만 방어.
-      return !isJoker(card) && rankOf(card) == '2';
+      // 받아치기: 진행 중인 공격과 같은 티어 이상으로만(2 < A < 조커).
+      final inTier = kindTier(attackKind);
+      // 예외: 조커 공격은 스페이드 A로 막을 수 있다.
+      if (inTier >= 3 && card == spadeAce) return true;
+      final t = attackTier(card);
+      return t > 0 && t >= inTier;
     }
 
     // 평시: 조커는 언제든 낼 수 있다(공격 개시).
@@ -162,22 +176,48 @@ abstract class OneCardLogic {
 
   // ---- 카드 효과 -----------------------------------------------------------
 
-  /// [card]가 공격 카드면 그 누적량(2 → 2, 조커 → 5), 아니면 0.
+  /// [card]가 공격 카드면 그 누적량, 아니면 0.
+  /// (2 → 2, A → 3, 흑백조커 JB → 5, 컬러조커 JR → 7)
   static int attackValue(String card) {
-    if (isJoker(card)) return jokerAttack;
-    if (rankOf(card) == '2') return twoAttack;
+    if (card == jokerBlack) return jokerBlackAttack;
+    if (card == jokerRed) return jokerRedAttack;
+    final rank = rankOf(card);
+    if (rank == 'A') return aceAttack;
+    if (rank == '2') return twoAttack;
     return 0;
   }
 
-  /// [card]의 공격 종류: 'two' / 'joker' / ''(공격 아님).
+  /// [card]의 공격 종류: 'two' / 'ace' / 'joker' / ''(공격 아님).
   static String attackKindOf(String card) {
     if (isJoker(card)) return 'joker';
-    if (rankOf(card) == '2') return 'two';
+    final rank = rankOf(card);
+    if (rank == 'A') return 'ace';
+    if (rank == '2') return 'two';
     return '';
   }
 
-  /// 스킵(A)인가.
-  static bool isSkip(String card) => !isJoker(card) && rankOf(card) == 'A';
+  /// 공격 카드의 받아치기 티어(2 < A < 조커). 공격 카드가 아니면 0.
+  static int attackTier(String card) {
+    if (isJoker(card)) return 3;
+    final rank = rankOf(card);
+    if (rank == 'A') return 2;
+    if (rank == '2') return 1;
+    return 0;
+  }
+
+  /// 진행 중인 공격 종류([attackKind])의 티어.
+  static int kindTier(String kind) {
+    switch (kind) {
+      case 'joker':
+        return 3;
+      case 'ace':
+        return 2;
+      case 'two':
+        return 1;
+      default:
+        return 0;
+    }
+  }
 
   /// 무늬 변경 와일드(7)인가.
   static bool isWildSuit(String card) => !isJoker(card) && rankOf(card) == '7';

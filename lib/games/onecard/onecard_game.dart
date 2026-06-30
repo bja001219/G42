@@ -57,20 +57,20 @@ class OneCardGame extends GameDefinition {
     return {
       'deck': deck,
       'discardTop': top,
+      // 버린 더미(맨 위 제외) — 유한 덱 보존 + 덱 소진 시 재활용용.
+      'discard': <String>[],
       'activeSuit': OneCardLogic.suitOf(top) ?? 'S',
       'hands': hands,
       'pending': 0,
-      'attackKind': '', // 'two' | 'joker' | ''
+      'attackKind': '', // 'two' | 'ace' | 'joker' | ''
       'jokers': useJokers,
       'lastAction': '', // UI 안내 문구
     };
   }
 
+  // 시작 카드로 부적합한(특수 효과가 있는) 카드인가: 공격(2/A/조커) 또는 7(와일드).
   static bool _isSpecial(String card) =>
-      OneCardLogic.isJoker(card) ||
-      OneCardLogic.isSkip(card) ||
-      OneCardLogic.isWildSuit(card) ||
-      OneCardLogic.rankOf(card) == '2';
+      OneCardLogic.attackValue(card) > 0 || OneCardLogic.isWildSuit(card);
 
   @override
   Widget buildGame(BuildContext context, GameSession session) {

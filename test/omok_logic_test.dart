@@ -189,6 +189,141 @@ void main() {
     });
   });
 
+  group('승리선 (winningLine)', () {
+    test('가로 5목의 승리선 = 그 5칸', () {
+      final cells = [
+        [7, 3],
+        [7, 4],
+        [7, 5],
+        [7, 6],
+        [7, 7],
+      ];
+      final board = _boardWith('B', cells);
+      final line = winningLine(board, omokIndex(7, 7), 'B');
+      expect(
+        line.toSet(),
+        {
+          omokIndex(7, 3),
+          omokIndex(7, 4),
+          omokIndex(7, 5),
+          omokIndex(7, 6),
+          omokIndex(7, 7),
+        },
+      );
+    });
+
+    test('세로 5목의 승리선 = 그 5칸', () {
+      final cells = [
+        [2, 6],
+        [3, 6],
+        [4, 6],
+        [5, 6],
+        [6, 6],
+      ];
+      final board = _boardWith('W', cells);
+      final line = winningLine(board, omokIndex(4, 6), 'W');
+      expect(line.length, 5);
+      expect(line.toSet(), {
+        for (final cell in cells) omokIndex(cell[0], cell[1]),
+      });
+    });
+
+    test('우하향 대각 승리선', () {
+      final cells = [
+        [4, 4],
+        [5, 5],
+        [6, 6],
+        [7, 7],
+        [8, 8],
+      ];
+      final board = _boardWith('B', cells);
+      final line = winningLine(board, omokIndex(6, 6), 'B');
+      expect(line.toSet(), {
+        for (final cell in cells) omokIndex(cell[0], cell[1]),
+      });
+    });
+
+    test('우상향 대각 승리선', () {
+      final cells = [
+        [8, 2],
+        [7, 3],
+        [6, 4],
+        [5, 5],
+        [4, 6],
+      ];
+      final board = _boardWith('W', cells);
+      final line = winningLine(board, omokIndex(6, 4), 'W');
+      expect(line.toSet(), {
+        for (final cell in cells) omokIndex(cell[0], cell[1]),
+      });
+    });
+
+    test('6목(장목)이면 6칸 이상을 모두 포함', () {
+      final cells = [
+        [7, 2],
+        [7, 3],
+        [7, 4],
+        [7, 5],
+        [7, 6],
+        [7, 7],
+      ];
+      final board = _boardWith('B', cells);
+      final line = winningLine(board, omokIndex(7, 4), 'B');
+      expect(line.length, greaterThanOrEqualTo(5));
+      expect(line.contains(omokIndex(7, 2)), true);
+      expect(line.contains(omokIndex(7, 7)), true);
+    });
+
+    test('승리선은 정렬되어 반환된다', () {
+      final cells = [
+        [7, 3],
+        [7, 4],
+        [7, 5],
+        [7, 6],
+        [7, 7],
+      ];
+      final board = _boardWith('B', cells);
+      final line = winningLine(board, omokIndex(7, 5), 'B');
+      final sorted = List<int>.from(line)..sort();
+      expect(line, sorted);
+    });
+
+    test('4목은 승리선이 비어 있음', () {
+      final cells = [
+        [7, 3],
+        [7, 4],
+        [7, 5],
+        [7, 6],
+      ];
+      final board = _boardWith('B', cells);
+      expect(winningLine(board, omokIndex(7, 6), 'B'), isEmpty);
+    });
+
+    test('다른 색 돌이 끼면 승리선이 비어 있음', () {
+      var board = _boardWith('B', [
+        [7, 3],
+        [7, 4],
+        [7, 6],
+        [7, 7],
+      ]);
+      board = placeStone(board, omokIndex(7, 5), 'W');
+      expect(winningLine(board, omokIndex(7, 7), 'B'), isEmpty);
+    });
+
+    test('범위를 벗어나거나 색이 다르면 승리선이 비어 있음', () {
+      final board = _boardWith('B', [
+        [7, 3],
+        [7, 4],
+        [7, 5],
+        [7, 6],
+        [7, 7],
+      ]);
+      expect(winningLine(board, -1, 'B'), isEmpty);
+      expect(winningLine(board, kOmokCells, 'B'), isEmpty);
+      expect(winningLine(board, omokIndex(7, 7), 'W'), isEmpty);
+    });
+  });
+
   group('무승부 판정', () {
     test('빈 보드는 가득 차지 않음', () {
       expect(isBoardFull(emptyOmokBoard()), false);

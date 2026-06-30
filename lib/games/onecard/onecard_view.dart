@@ -48,6 +48,12 @@ class _OneCardViewState extends State<OneCardView> {
   String get _discardTop =>
       (widget.room.state['discardTop'] as String?) ?? 'SA';
 
+  /// 버린 더미(맨 위 discardTop 제외). 덱이 소진되면 섞어서 재활용한다.
+  List<String> get _discard =>
+      ((widget.room.state['discard'] as List?) ?? const [])
+          .map((e) => e as String)
+          .toList();
+
   String get _activeSuit => (widget.room.state['activeSuit'] as String?) ?? 'S';
 
   int get _pending => (widget.room.state['pending'] as int?) ?? 0;
@@ -556,9 +562,15 @@ class _OneCardViewState extends State<OneCardView> {
       return;
     }
 
+    // 스페이드 A로 조커 공격을 막는 특수 방어: 누적을 무효화한다(드로우 없음).
+    final defendsJoker =
+        _pending > 0 && _attackKind == 'joker' && card == OneCardLogic.spadeAce;
+
     // 와일드(7 무늬 변경 · 조커)면 이어갈 무늬를 직접 고른다.
     // 조커는 무늬가 없으므로 반드시 새 무늬를 지정해야 다음 차례가 이어진다.
-    final isWild = OneCardLogic.isWildSuit(card) || OneCardLogic.isJoker(card);
+    // (스페이드 A 방어는 무늬가 스페이드로 정해져 선택하지 않는다.)
+    final isWild = !defendsJoker &&
+        (OneCardLogic.isWildSuit(card) || OneCardLogic.isJoker(card));
     String chosenSuit = OneCardLogic.suitOf(card) ?? _activeSuit;
     if (isWild) {
       final picked = await _pickSuit(context);
@@ -571,18 +583,33 @@ class _OneCardViewState extends State<OneCardView> {
     final newHand = List<String>.from(myHand)..remove(card);
     hands[me] = newHand;
     state['hands'] = hands;
+
+    // 직전 맨 위 카드를 버린 더미에 묻는다(유한 덱 보존 + 재활용용).
+    final discard = List<String>.from(state['discard'] as List? ?? const []);
+    discard.add(_discardTop);
+    state['discard'] = discard;
     state['discardTop'] = card;
 
-    // 무늬 갱신: 와일드(7·조커)는 선택 무늬, 그 외는 카드 무늬.
-    state['activeSuit'] = isWild ? chosenSuit : OneCardLogic.suitOf(card);
+    // 무늬 갱신: 스페이드 A 방어는 스페이드, 와일드(7·조커)는 선택 무늬, 그 외는 카드 무늬.
+    state['activeSuit'] = defendsJoker
+        ? 'S'
+        : (isWild ? chosenSuit : OneCardLogic.suitOf(card));
 
-    // 공격 누적.
-    final attack = OneCardLogic.attackValue(card);
-    var nextPending = _pending;
-    var nextKind = _attackKind;
-    if (attack > 0) {
-      nextPending = _pending + attack;
-      nextKind = OneCardLogic.attackKindOf(card);
+    // 공격 누적 / 방어.
+    final int nextPending;
+    final String nextKind;
+    if (defendsJoker) {
+      nextPending = 0; // 스페이드 A 방어 → 공격 무효.
+      nextKind = '';
+    } else {
+      final attack = OneCardLogic.attackValue(card);
+      if (attack > 0) {
+        nextPending = _pending + attack; // 평시 개시(=attack) 또는 받아치기 누적.
+        nextKind = OneCardLogic.attackKindOf(card);
+      } else {
+        nextPending = _pending; // 평시 일반 카드(보통 0).
+        nextKind = _attackKind;
+      }
     }
     state['pending'] = nextPending;
     state['attackKind'] = nextKind;
@@ -598,29 +625,29 @@ class _OneCardViewState extends State<OneCardView> {
       return;
     }
 
-    // 차례 결정.
-    // A(스킵): 2인 게임이라 낸 사람이 한 번 더 둔다 → 내 차례 유지.
-    // 그 외: 상대 차례.
-    final skip = OneCardLogic.isSkip(card);
-    final nextTurn = skip ? me : opp;
-
     state['lastAction'] = _actionText(
       card,
-      attack,
-      skip,
+      defendsJoker ? 0 : OneCardLogic.attackValue(card),
+      defendsJoker,
       isWild ? chosenSuit : null,
     );
-    await widget.session.submit(state, nextTurn: nextTurn);
+    // A는 더 이상 스킵이 아니라 공격 카드 → 항상 상대 차례로 넘어간다.
+    await widget.session.submit(state, nextTurn: opp);
   }
 
-  String _actionText(String card, int attack, bool skip, String? wildSuit) {
+  String _actionText(
+    String card,
+    int attack,
+    bool defendsJoker,
+    String? wildSuit,
+  ) {
     final suitTag = wildSuit != null
         ? ' → ${OneCardLogic.suitSymbol(wildSuit)}${OneCardLogic.suitName(wildSuit)}'
         : '';
+    if (defendsJoker) return '스페이드 A로 조커 공격 방어!';
     if (attack > 0) {
-      return '${OneCardLogic.label(card)} 공격!$suitTag';
+      return '${OneCardLogic.label(card)} 공격! (+$attack장)$suitTag';
     }
-    if (skip) return 'A 스킵 — 한 번 더!';
     if (OneCardLogic.isWildSuit(card)) return '7 무늬 변경$suitTag';
     return '';
   }
@@ -639,12 +666,14 @@ class _OneCardViewState extends State<OneCardView> {
     // 공격 누적이 있으면 그만큼, 없으면 1장.
     final drawCount = pending > 0 ? pending : 1;
 
+    // 버린 더미(discardTop 제외) 전체를 재활용 풀로 넘긴다. discardTop 은 별도
+    // 필드라 더미에 없으므로 keepTop 은 비운다 → 덱 소진 시 묻힌 카드를 모두 재활용.
     final result = OneCardLogic.draw(
       _deck,
-      _discardPileForRecycle(),
+      _discard,
       drawCount,
       rng: _rng,
-      keepTop: _discardTop,
+      keepTop: '',
     );
 
     final state = _freshState();
@@ -652,6 +681,7 @@ class _OneCardViewState extends State<OneCardView> {
     hands[me] = [...myHand, ...result.drawn];
     state['hands'] = hands;
     state['deck'] = result.deck;
+    state['discard'] = result.discard; // 재활용으로 줄어든 버린 더미를 반영.
     // 공격 처리 끝 → 누적 초기화, 턴 종료(상대로).
     state['pending'] = 0;
     state['attackKind'] = '';
@@ -661,12 +691,6 @@ class _OneCardViewState extends State<OneCardView> {
 
     await widget.session.submit(state, nextTurn: opp);
   }
-
-  /// 재활용용 버린 더미. 우리는 버린 카드를 따로 보관하지 않으므로
-  /// (단순화: 낸 카드는 사라진다) 맨 위 한 장만 더미로 간주한다.
-  /// 덱 소진 시에는 [OneCardLogic.draw]가 빈 더미를 받아 더 못 뽑게 되며,
-  /// 그 경우 가능한 만큼만 뽑는다.
-  List<String> _discardPileForRecycle() => [_discardTop];
 
   // ---- 무늬 선택 다이얼로그 (7) ---------------------------------------------
 
@@ -872,23 +896,24 @@ class _OneCardViewState extends State<OneCardView> {
                 '버린 더미 맨 위와 무늬 또는 숫자가 같은 카드를 냅니다. '
                     '낼 카드가 없으면 1장 뽑고 턴이 끝납니다. 손패를 먼저 비우면 승리.',
               ),
+              _rule('공격 카드', '2 = 상대 2장, A = 상대 3장. 받아치지 못하면 누적 장수를 모두 뽑고 턴이 끝납니다.'),
               _rule(
-                '2 (공격)',
-                '다음 사람이 2장을 뽑습니다. 2로 받아치면 누적(4, 6...). '
-                    '못 막으면 누적된 장수를 모두 뽑고 턴이 끝납니다.',
+                '받아치기 (누적)',
+                '같은 티어 이상으로만 받아칠 수 있습니다(2 < A < 조커). '
+                    '2 공격은 2·A·조커로, A 공격은 A·조커로 받아쳐 장수를 누적합니다.',
               ),
-              _rule('A (스킵)', '상대 턴을 건너뜁니다. 2인이라 낸 사람이 한 번 더 둡니다.'),
               _rule('7 (무늬 변경)', '낼 때 바꿀 무늬를 직접 고릅니다(와일드).'),
               if (jokers)
                 _rule(
-                  '조커 (공격 +5 · 와일드)',
-                  '조커는 +5장 공격입니다. 무늬가 없으므로 낼 때 이어갈 무늬를 '
-                      '직접 지정합니다. 조커 공격은 조커로만 방어할 수 있고 '
-                      '2와 섞어 누적할 수 없습니다.',
+                  '조커 (공격 · 와일드)',
+                  '흑백조커(검정) = 상대 5장, 컬러조커(빨강) = 상대 7장. '
+                      '무늬가 없으므로 낼 때 이어갈 무늬를 직접 지정합니다. '
+                      '조커 공격은 조커로만 받아칠 수 있고, '
+                      '예외로 스페이드 A를 내면 조커 공격을 무효로 막습니다.',
                 )
               else
                 _rule('조커', '이 판은 조커를 사용하지 않습니다.'),
-              _rule('덱 소진', '뽑을 카드가 떨어지면 버린 더미(맨 위 제외)를 섞어 재활용합니다.'),
+              _rule('덱 소진', '뽑을 카드가 떨어지면 버린 더미를 섞어 재활용합니다(유한 1팩 = 54장).'),
             ],
           ),
         ),
@@ -932,6 +957,9 @@ class _OneCardViewState extends State<OneCardView> {
           .map((e) => e as String)
           .toList(),
       'discardTop': (s['discardTop'] as String?) ?? 'SA',
+      'discard': ((s['discard'] as List?) ?? const [])
+          .map((e) => e as String)
+          .toList(),
       'activeSuit': (s['activeSuit'] as String?) ?? 'S',
       'hands': Map<String, dynamic>.from(s['hands'] as Map? ?? {}),
       'pending': (s['pending'] as int?) ?? 0,

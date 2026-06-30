@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/game_session.dart';
@@ -27,6 +29,18 @@ class OmokBoard extends StatefulWidget {
 class _OmokBoardState extends State<OmokBoard> {
   bool _submitting = false;
 
+  /// 승부가 결정된 직후 결과 박스를 바로 띄우지 않고, 먼저 승착이 놓인 보드와
+  /// 승리선을 잠깐 보여준 뒤 true 가 된다(상대가 "어떻게 졌는지" 볼 수 있도록).
+  bool _resultRevealed = false;
+
+  /// 승리를 만든 5목 칸들(강조 표시용). 승리가 아니거나 미계산이면 null.
+  List<int>? _winLine;
+
+  Timer? _revealTimer;
+
+  /// 승착을 보여준 뒤 결과 박스가 나타나기까지의 지연.
+  static const _winRevealDelay = Duration(milliseconds: 1400);
+
   GameSession get _session => widget.session;
   Room get _room => widget.room;
 
@@ -38,6 +52,62 @@ class _OmokBoardState extends State<OmokBoard> {
   int get _lastMove {
     final v = _room.state['lastMove'];
     return v is int ? v : -1;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // 이미 끝난 방으로 입장(중도 합류) 시에는 연출 없이 즉시 결과 표시.
+    if (_room.status == RoomStatus.finished) {
+      _resultRevealed = true;
+      _winLine = _computeWinLine();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant OmokBoard old) {
+    super.didUpdateWidget(old);
+    final was = old.room.status == RoomStatus.finished;
+    final now = _room.status == RoomStatus.finished;
+    if (!was && now) {
+      // 방금 대국이 끝났다 — 양쪽 클라이언트가 같은 finished 스냅샷을 받으므로
+      // 로컬 타이머 지연도 양쪽에서 동일하게 동작한다.
+      _winLine = _computeWinLine();
+      final isWinFinish = _room.winner != null &&
+          _room.winner != 'draw' &&
+          (_winLine?.isNotEmpty ?? false);
+      if (isWinFinish) {
+        _resultRevealed = false; // 먼저 승착이 놓인 보드를 보여준다.
+        _revealTimer?.cancel();
+        _revealTimer = Timer(_winRevealDelay, () {
+          if (mounted) setState(() => _resultRevealed = true);
+        });
+      } else {
+        _resultRevealed = true; // 무승부 등은 즉시.
+      }
+    } else if (was && !now) {
+      // 재대국으로 리셋.
+      _revealTimer?.cancel();
+      _resultRevealed = false;
+      _winLine = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _revealTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 마지막 착수를 기준으로 승리선을 계산한다(없으면 null).
+  List<int>? _computeWinLine() {
+    final lm = _lastMove;
+    if (lm < 0 || lm >= kOmokCells) return null;
+    final board = _board;
+    final stone = board[lm];
+    if (stone == '.') return null;
+    final line = winningLine(board, lm, stone);
+    return line.isEmpty ? null : line;
   }
 
   Future<void> _onTapCell(int index) async {
@@ -106,6 +176,7 @@ class _OmokBoardState extends State<OmokBoard> {
                         painter: _OmokPainter(
                           board: _board,
                           lastMove: _lastMove,
+                          winLine: _winLine,
                         ),
                       ),
                     );
@@ -115,7 +186,7 @@ class _OmokBoardState extends State<OmokBoard> {
             ),
           ),
         ),
-        if (_room.status == RoomStatus.finished)
+        if (_room.status == RoomStatus.finished && _resultRevealed)
           _ResultOverlay(
             session: _session,
             room: _room,
@@ -273,7 +344,10 @@ class _OmokPainter extends CustomPainter {
   final String board;
   final int lastMove;
 
-  _OmokPainter({required this.board, required this.lastMove});
+  /// 승리선 칸들(있으면 금색 링으로 강조). 진행 중이면 null.
+  final List<int>? winLine;
+
+  _OmokPainter({required this.board, required this.lastMove, this.winLine});
 
   static const _wood = Color(0xFFD9A86B);
   static const _woodDark = Color(0xFFB5824A);
@@ -367,9 +441,38 @@ class _OmokPainter extends CustomPainter {
         canvas.drawCircle(center, stoneR * 0.4, markPaint);
       }
     }
+
+    // 승리선 강조: 5목을 이룬 칸들에 금색 링을 덧그린다.
+    final wl = winLine;
+    if (wl != null && wl.isNotEmpty) {
+      final ringPaint = Paint()
+        ..color = G42Colors.warn
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5;
+      for (final idx in wl) {
+        if (idx < 0 || idx >= kOmokCells) continue;
+        final center = Offset(
+          origin + omokCol(idx) * cell,
+          origin + omokRow(idx) * cell,
+        );
+        canvas.drawCircle(center, stoneR + 2.5, ringPaint);
+      }
+    }
   }
 
   @override
   bool shouldRepaint(covariant _OmokPainter old) =>
-      old.board != board || old.lastMove != lastMove;
+      old.board != board ||
+      old.lastMove != lastMove ||
+      !_sameLine(old.winLine, winLine);
+
+  static bool _sameLine(List<int>? a, List<int>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 }
