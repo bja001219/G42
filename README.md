@@ -2,6 +2,9 @@
 
 **둘이서 즐기는 미니게임 모음** — Flutter 기반, 방을 만들고 상대가 들어오면 온라인으로 대전.
 
+> ⚠️ **데모/포트폴리오 프로젝트.**
+> 이 저장소의 Firebase 프로젝트(`gfor2-e681d`)는 개발·데모용으로 Firestore 규칙이 개방(`allow read, write: if true;`)돼 있습니다. 실 서비스에 재사용하려면 `firestore.rules`를 Firebase Auth 기반으로 강화하고, 자신의 Firebase 프로젝트로 [`lib/firebase_options.dart`](lib/firebase_options.dart)와 [`android/app/google-services.json`](android/app/google-services.json)을 재생성하세요. 자세한 세팅은 [FIREBASE_SETUP.md](FIREBASE_SETUP.md) 참고.
+
 첫 화면은 **게임 선택 로비**다. 게임을 하나 추가할 때마다(`all_games.dart`에 한 줄)
 로비에 카드가 자동으로 늘어난다.
 
