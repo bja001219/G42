@@ -85,11 +85,13 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen>
     // onError 를 둬서 전송 계층이 에러를 흘려도 구독이 조용히 죽지 않게 한다.
     // (FirebaseRoomService.watchRoom 은 이미 자동 재구독으로 에러를 흡수하지만,
     //  방어적으로 한 겹 더 둔다.)
-    _sub ??= _service.watchRoom(widget.code).listen(
-      _onRoom,
-      onError: (Object e, StackTrace st) =>
-          debugPrint('대기실 방 구독 에러(무시하고 유지): $e'),
-    );
+    _sub ??= _service
+        .watchRoom(widget.code)
+        .listen(
+          _onRoom,
+          onError: (Object e, StackTrace st) =>
+              debugPrint('대기실 방 구독 에러(무시하고 유지): $e'),
+        );
 
     // presence: 온라인일 때만. 내 heartbeat 송신을 시작하고, 상대 침묵을 주기적으로
     // 확인한다. (대기실에 머무는 동안 계속 돌아 인게임에서도 유효하다.)
@@ -271,9 +273,7 @@ class _RoomLobbyScreenState extends State<RoomLobbyScreen>
         return AlertDialog(
           backgroundColor: G42Colors.surface,
           title: const Text('상대 연결 확인'),
-          content: Text(
-            '$oppName 님의 응답이 한동안 없어요. 연결이 끊겼을 수 있습니다.\n계속 기다릴까요?',
-          ),
+          content: Text('$oppName 님의 응답이 한동안 없어요. 연결이 끊겼을 수 있습니다.\n계속 기다릴까요?'),
           actions: [
             TextButton(
               style: TextButton.styleFrom(foregroundColor: G42Colors.bad),

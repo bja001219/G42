@@ -102,9 +102,7 @@ void main() {
       SystemChannels.platform,
       (MethodCall call) async {
         if (call.method == 'SystemChrome.setPreferredOrientations') {
-          orientationCalls.add(
-            (call.arguments as List).cast<String>(),
-          );
+          orientationCalls.add((call.arguments as List).cast<String>());
         }
         return null;
       },
@@ -143,8 +141,9 @@ void main() {
     });
 
     test('가로 선호 게임은 고스톱뿐이다(현재)', () {
-      final landscapeGames =
-          GameRegistry.games.where((g) => g.prefersLandscape).toList();
+      final landscapeGames = GameRegistry.games
+          .where((g) => g.prefersLandscape)
+          .toList();
       expect(landscapeGames.map((g) => g.id), <String>['gostop']);
     });
   });

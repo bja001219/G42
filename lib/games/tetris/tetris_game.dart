@@ -31,16 +31,13 @@ class TetrisGame extends GameDefinition {
 
   @override
   Map<String, dynamic> createInitialState(List<String> playerIds) =>
-      <String, dynamic>{
-        's0': _emptySeat(),
-        's1': _emptySeat(),
-      };
+      <String, dynamic>{'s0': _emptySeat(), 's1': _emptySeat()};
 
   static Map<String, dynamic> _emptySeat() => <String, dynamic>{
-        'board': '',
-        'lines': 0,
-        'garbage': 0,
-      };
+    'board': '',
+    'lines': 0,
+    'garbage': 0,
+  };
 
   @override
   Widget buildGame(BuildContext context, GameSession session) {

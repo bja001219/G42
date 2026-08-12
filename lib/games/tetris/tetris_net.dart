@@ -12,8 +12,9 @@ import 'tetromino.dart';
 /// [TetrisEngine.rows] * [TetrisEngine.cols]; a shorter/blank string decodes as
 /// an empty board.
 class TetrisNet {
-  static final List<Color> _pieceColors =
-      TetrominoType.values.map((t) => Tetromino.of(t).color).toList();
+  static final List<Color> _pieceColors = TetrominoType.values
+      .map((t) => Tetromino.of(t).color)
+      .toList();
 
   static final Map<int, int> _colorToIndex = {
     for (var i = 0; i < _pieceColors.length; i++)
@@ -70,7 +71,7 @@ class TetrisNet {
   }
 
   static List<List<Color?>> emptyBoard() => List.generate(
-        TetrisEngine.rows,
-        (_) => List<Color?>.filled(TetrisEngine.cols, null),
-      );
+    TetrisEngine.rows,
+    (_) => List<Color?>.filled(TetrisEngine.cols, null),
+  );
 }

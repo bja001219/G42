@@ -29,14 +29,15 @@ class _CountingRoomService implements RoomService {
   @override
   Future<void> leaveRoom(String code, String playerId) async {}
   @override
-  Future<Room> createRoom({String gameId = '', required RoomPlayer host}) async =>
-      throw UnimplementedError();
+  Future<Room> createRoom({
+    String gameId = '',
+    required RoomPlayer host,
+  }) async => throw UnimplementedError();
   @override
   Future<JoinResult> joinRoom({
     required String code,
     required RoomPlayer player,
-  }) async =>
-      throw UnimplementedError();
+  }) async => throw UnimplementedError();
   @override
   Future<void> startGame(
     String code, {
@@ -50,9 +51,9 @@ void main() {
     // 테스트에서 제어 가능한 단조 경과 시간.
     late Duration clk;
     OpponentPresence make([int staleSec = 45]) => OpponentPresence(
-          staleAfter: Duration(seconds: staleSec),
-          clock: () => clk,
-        );
+      staleAfter: Duration(seconds: staleSec),
+      clock: () => clk,
+    );
 
     setUp(() => clk = Duration.zero);
 

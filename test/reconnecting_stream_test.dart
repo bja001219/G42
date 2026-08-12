@@ -12,10 +12,7 @@ import 'package:g42/core/services/reconnecting_stream.dart';
 void main() {
   test('정상 이벤트는 그대로 전달된다', () async {
     final ctrl = StreamController<int>();
-    final out = reconnectingStream<int>(
-      () => ctrl.stream,
-      delay: (_) async {},
-    );
+    final out = reconnectingStream<int>(() => ctrl.stream, delay: (_) async {});
     final received = <int>[];
     final sub = out.listen(received.add);
 
@@ -68,15 +65,12 @@ void main() {
   test('소스가 예기치 않게 완료되어도 재구독한다', () async {
     final sources = <StreamController<int>>[];
     var subscribeCount = 0;
-    final out = reconnectingStream<int>(
-      () {
-        subscribeCount++;
-        final c = StreamController<int>();
-        sources.add(c);
-        return c.stream;
-      },
-      delay: (_) async {},
-    );
+    final out = reconnectingStream<int>(() {
+      subscribeCount++;
+      final c = StreamController<int>();
+      sources.add(c);
+      return c.stream;
+    }, delay: (_) async {});
 
     final received = <int>[];
     final sub = out.listen(received.add);

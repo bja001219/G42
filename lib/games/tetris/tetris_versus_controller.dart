@@ -59,8 +59,10 @@ class TetrisVersusController extends ChangeNotifier {
     _roomSub = session.watch().listen(_onRoom);
     // Publish our board on a fixed, modest cadence (only when it changed) so
     // Firestore writes stay bounded regardless of how busy the game is.
-    _publishTimer =
-        Timer.periodic(const Duration(milliseconds: 150), (_) => _publish());
+    _publishTimer = Timer.periodic(
+      const Duration(milliseconds: 150),
+      (_) => _publish(),
+    );
   }
 
   void _relay() {
@@ -105,10 +107,10 @@ class TetrisVersusController extends ChangeNotifier {
   }
 
   Map<String, dynamic> _seatPayload() => <String, dynamic>{
-        'board': TetrisNet.encodeBoard(player),
-        'lines': player.lines,
-        'garbage': _garbageSent,
-      };
+    'board': TetrisNet.encodeBoard(player),
+    'lines': player.lines,
+    'garbage': _garbageSent,
+  };
 
   void _onToppedOut() {
     if (_finished) return;

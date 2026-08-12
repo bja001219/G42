@@ -27,10 +27,7 @@ class BoardView extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(11),
-          child: CustomPaint(
-            painter: _BoardPainter(game),
-            size: Size.infinite,
-          ),
+          child: CustomPaint(painter: _BoardPainter(game), size: Size.infinite),
         ),
       ),
     );
@@ -62,10 +59,7 @@ class OpponentBoardView extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(11),
-          child: CustomPaint(
-            painter: _GridPainter(board),
-            size: Size.infinite,
-          ),
+          child: CustomPaint(painter: _GridPainter(board), size: Size.infinite),
         ),
       ),
     );

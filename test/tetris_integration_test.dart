@@ -6,16 +6,16 @@ import 'package:g42/games/tetris/tetris_net.dart';
 
 void main() {
   Room baseRoom(Map<String, dynamic> state) => Room(
-        code: 'ABCD',
-        gameId: 'tetris',
-        status: RoomStatus.playing,
-        players: const [
-          RoomPlayer(id: 'p0', name: '호스트'),
-          RoomPlayer(id: 'p1', name: '게스트'),
-        ],
-        hostId: 'p0',
-        state: state,
-      );
+    code: 'ABCD',
+    gameId: 'tetris',
+    status: RoomStatus.playing,
+    players: const [
+      RoomPlayer(id: 'p0', name: '호스트'),
+      RoomPlayer(id: 'p1', name: '게스트'),
+    ],
+    hostId: 'p0',
+    state: state,
+  );
 
   group('Room.applyPatch dotted state paths (per-seat merge)', () {
     test('두 좌석이 서로 덮어쓰지 않는다', () {

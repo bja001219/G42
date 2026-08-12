@@ -152,11 +152,7 @@ class _MinesweeperViewState extends State<MinesweeperView> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          _chip(
-            icon: '🚩',
-            label: '$remaining',
-            color: G42Colors.bad,
-          ),
+          _chip(icon: '🚩', label: '$remaining', color: G42Colors.bad),
           const Spacer(),
           const Text(
             '둘이 함께!',
@@ -171,7 +167,11 @@ class _MinesweeperViewState extends State<MinesweeperView> {
     );
   }
 
-  Widget _chip({required String icon, required String label, required Color color}) {
+  Widget _chip({
+    required String icon,
+    required String label,
+    required Color color,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
@@ -251,9 +251,7 @@ class _MinesweeperViewState extends State<MinesweeperView> {
 
     if (lost && isMine) {
       // 패배 시 모든 지뢰 공개. 밟은 칸은 더 진한 빨강.
-      bg = i == hit
-          ? G42Colors.bad
-          : G42Colors.bad.withValues(alpha: 0.45);
+      bg = i == hit ? G42Colors.bad : G42Colors.bad.withValues(alpha: 0.45);
       child = Text('💣', style: TextStyle(fontSize: textSize));
     } else if (lost && isFlag && !isMine) {
       // 빗나간 깃발 표시.
@@ -288,7 +286,10 @@ class _MinesweeperViewState extends State<MinesweeperView> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: bg,
-          border: Border.all(color: Colors.black.withValues(alpha: 0.35), width: 0.5),
+          border: Border.all(
+            color: Colors.black.withValues(alpha: 0.35),
+            width: 0.5,
+          ),
           borderRadius: BorderRadius.circular(size * 0.12),
         ),
         child: child,
@@ -330,9 +331,7 @@ class _MinesweeperViewState extends State<MinesweeperView> {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: on
-                        ? G42Colors.accent
-                        : G42Colors.surfaceHi,
+                    color: on ? G42Colors.accent : G42Colors.surfaceHi,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: on ? G42Colors.accent : Colors.white12,

@@ -48,7 +48,10 @@ class _FakeRoomService implements RoomService {
   Future<void> heartbeat(String code, String playerId) async {}
 
   @override
-  Future<Room> createRoom({String gameId = '', required RoomPlayer host}) async {
+  Future<Room> createRoom({
+    String gameId = '',
+    required RoomPlayer host,
+  }) async {
     throw UnimplementedError();
   }
 
@@ -98,19 +101,20 @@ Future<IdentityService> _identity(String id) async {
   return IdentityService.load();
 }
 
-Widget _harness(_FakeRoomService svc, IdentityService identity, GameSession s) =>
-    AppServices(
-      identity: identity,
-      roomService: svc,
-      scoreStore: LocalScoreStore(),
-      firebaseReady: true,
-      child: MaterialApp(home: GameHostScreen(session: s)),
-    );
+Widget _harness(
+  _FakeRoomService svc,
+  IdentityService identity,
+  GameSession s,
+) => AppServices(
+  identity: identity,
+  roomService: svc,
+  scoreStore: LocalScoreStore(),
+  firebaseReady: true,
+  child: MaterialApp(home: GameHostScreen(session: s)),
+);
 
 void main() {
-  testWidgets('오목 승리: 결과 오버레이는 ~5초 뒤에 뜬다(그 전엔 보드/승리선만 노출)', (
-    tester,
-  ) async {
+  testWidgets('오목 승리: 결과 오버레이는 ~5초 뒤에 뜬다(그 전엔 보드/승리선만 노출)', (tester) async {
     final svc = _FakeRoomService();
     final identity = await _identity('guest'); // 진 쪽 시점.
     final session = GameSession(
@@ -134,7 +138,11 @@ void main() {
 
     // 흑(host)이 5목으로 승리.
     svc.emit(
-      _omokRoom(status: RoomStatus.finished, winner: 'host', state: _winState()),
+      _omokRoom(
+        status: RoomStatus.finished,
+        winner: 'host',
+        state: _winState(),
+      ),
     );
     await tester.pump();
     await tester.pump();

@@ -10,7 +10,8 @@ class ComboBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final combo = game.combo; // 0-based: 0 = first clear, 1 = second in a row...
+    final combo =
+        game.combo; // 0-based: 0 = first clear, 1 = second in a row...
     final showCombo = combo >= 1;
     final showB2b = game.backToBack;
     if (!showCombo && !showB2b) return const SizedBox.shrink();

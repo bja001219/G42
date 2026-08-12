@@ -78,7 +78,8 @@ class _OmokBoardState extends State<OmokBoard> {
       // 호스트 통합 오버레이의 지연 기준(OmokGame.resultRevealDelay)과 '똑같은'
       // 조건(무승부가 아닌 승부)을 쓴다. 둘이 어긋나면(예: 승리선 계산이 빈 값)
       // 인라인 박스만 먼저 떠 재대국 버튼이 노출될 수 있으므로 기준을 일치시킨다.
-      final isWinFinish = _room.winner != null &&
+      final isWinFinish =
+          _room.winner != null &&
           _room.winner!.isNotEmpty &&
           _room.winner != 'draw';
       if (isWinFinish) {
@@ -158,7 +159,8 @@ class _OmokBoardState extends State<OmokBoard> {
           session: _session,
           room: _room,
           // 승부가 났지만 아직 결과 박스 전(승착 노출 구간)이면 승리선을 보라고 안내.
-          resultPending: _room.status == RoomStatus.finished &&
+          resultPending:
+              _room.status == RoomStatus.finished &&
               !_resultRevealed &&
               (_winLine?.isNotEmpty ?? false),
         ),

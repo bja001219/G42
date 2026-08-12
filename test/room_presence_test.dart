@@ -37,27 +37,28 @@ class _FakeRoomService implements RoomService {
   @override
   Future<void> leaveRoom(String code, String playerId) async {}
   @override
-  Future<Room> createRoom({String gameId = '', required RoomPlayer host}) async =>
-      throw UnimplementedError();
+  Future<Room> createRoom({
+    String gameId = '',
+    required RoomPlayer host,
+  }) async => throw UnimplementedError();
   @override
   Future<JoinResult> joinRoom({
     required String code,
     required RoomPlayer player,
-  }) async =>
-      throw UnimplementedError();
+  }) async => throw UnimplementedError();
 }
 
 Room _room({int players = 2, Map<String, int> beats = const {}}) => Room(
-      code: 'TEST',
-      gameId: '',
-      status: RoomStatus.waiting,
-      players: [
-        const RoomPlayer(id: 'host', name: '방장'),
-        if (players >= 2) const RoomPlayer(id: 'guest', name: '게스트'),
-      ],
-      hostId: 'host',
-      heartbeats: beats,
-    );
+  code: 'TEST',
+  gameId: '',
+  status: RoomStatus.waiting,
+  players: [
+    const RoomPlayer(id: 'host', name: '방장'),
+    if (players >= 2) const RoomPlayer(id: 'guest', name: '게스트'),
+  ],
+  hostId: 'host',
+  heartbeats: beats,
+);
 
 Future<IdentityService> _identity() async {
   SharedPreferences.setMockInitialValues({
@@ -69,12 +70,12 @@ Future<IdentityService> _identity() async {
 }
 
 Widget _harness(_FakeRoomService svc, IdentityService id) => AppServices(
-      identity: id,
-      roomService: svc,
-      scoreStore: LocalScoreStore(),
-      firebaseReady: true,
-      child: const MaterialApp(home: RoomLobbyScreen(code: 'TEST', isHost: true)),
-    );
+  identity: id,
+  roomService: svc,
+  scoreStore: LocalScoreStore(),
+  firebaseReady: true,
+  child: const MaterialApp(home: RoomLobbyScreen(code: 'TEST', isHost: true)),
+);
 
 void main() {
   testWidgets('온라인 입장 시 내 heartbeat 송신을 시작한다', (tester) async {

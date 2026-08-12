@@ -99,7 +99,9 @@ class Tetromino {
     var current = spawn;
     for (var i = 0; i < 4; i++) {
       states.add(current);
-      current = current.map((cell) => Cell(cell.col, n - 1 - cell.row)).toList();
+      current = current
+          .map((cell) => Cell(cell.col, n - 1 - cell.row))
+          .toList();
     }
     return Tetromino._(type, color, n, states);
   }

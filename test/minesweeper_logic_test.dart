@@ -103,8 +103,11 @@ void main() {
         final s = MinesweeperState.fresh(rows: 9, cols: 9, mines: 10);
         final next = MinesweeperState.applyReveal(s, 40, Random(seed));
         expect(MinesweeperState.generatedOf(next), true, reason: 'seed=$seed');
-        expect(MinesweeperState.phaseOf(next), isNot('lost'),
-            reason: 'seed=$seed 첫 클릭 패배 없음');
+        expect(
+          MinesweeperState.phaseOf(next),
+          isNot('lost'),
+          reason: 'seed=$seed 첫 클릭 패배 없음',
+        );
         expect(MinesweeperState.revealedOf(next)[40], 1, reason: 'seed=$seed');
       }
     });

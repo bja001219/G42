@@ -136,10 +136,9 @@ class TetrisEngine extends ChangeNotifier {
   /// Absolute board cells occupied by the active piece.
   List<Cell> currentCells() {
     if (_current == null) return const [];
-    return Tetromino.of(_current!)
-        .cells(_rot)
-        .map((c) => Cell(c.row + _row, c.col + _col))
-        .toList();
+    return Tetromino.of(
+      _current!,
+    ).cells(_rot).map((c) => Cell(c.row + _row, c.col + _col)).toList();
   }
 
   /// Where the active piece would land (for the ghost preview).

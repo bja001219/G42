@@ -200,16 +200,13 @@ void main() {
       ];
       final board = _boardWith('B', cells);
       final line = winningLine(board, omokIndex(7, 7), 'B');
-      expect(
-        line.toSet(),
-        {
-          omokIndex(7, 3),
-          omokIndex(7, 4),
-          omokIndex(7, 5),
-          omokIndex(7, 6),
-          omokIndex(7, 7),
-        },
-      );
+      expect(line.toSet(), {
+        omokIndex(7, 3),
+        omokIndex(7, 4),
+        omokIndex(7, 5),
+        omokIndex(7, 6),
+        omokIndex(7, 7),
+      });
     });
 
     test('세로 5목의 승리선 = 그 5칸', () {

@@ -77,7 +77,8 @@ class _PiecePainter extends CustomPainter {
     final wCells = (maxC - minC + 1).toDouble();
     final hCells = (maxR - minR + 1).toDouble();
 
-    final cell = (size.width / wCells < size.height / hCells
+    final cell =
+        (size.width / wCells < size.height / hCells
             ? size.width / wCells
             : size.height / hCells) *
         0.92;

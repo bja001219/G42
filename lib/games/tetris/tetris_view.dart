@@ -137,7 +137,10 @@ class _TetrisViewState extends State<TetrisView>
   Widget _opponentArea() {
     // Shrink the opponent thumbnail on short windows so the (taller) player
     // board keeps priority; stays full size on normal portrait screens.
-    final height = (MediaQuery.sizeOf(context).height * 0.14).clamp(80.0, 118.0);
+    final height = (MediaQuery.sizeOf(context).height * 0.14).clamp(
+      80.0,
+      118.0,
+    );
     return SizedBox(
       height: height,
       child: Row(
@@ -237,8 +240,9 @@ class _TetrisViewState extends State<TetrisView>
         child: AnimatedBuilder(
           animation: _flash,
           builder: (context, _) => ColoredBox(
-            color: Colors.white
-                .withValues(alpha: _flashStrength * (1 - _flash.value)),
+            color: Colors.white.withValues(
+              alpha: _flashStrength * (1 - _flash.value),
+            ),
           ),
         ),
       ),

@@ -9,7 +9,12 @@ class Blocks {
 
   /// Paints a single glossy block filling [rect]. [glow] adds a soft colored
   /// halo (used for the active piece).
-  static void paint(Canvas canvas, Rect rect, Color color, {bool glow = false}) {
+  static void paint(
+    Canvas canvas,
+    Rect rect,
+    Color color, {
+    bool glow = false,
+  }) {
     final body = RRect.fromRectAndRadius(rect, const Radius.circular(4));
 
     if (glow) {
@@ -50,11 +55,16 @@ class Blocks {
       ..color = Colors.white.withValues(alpha: 0.40)
       ..strokeWidth = 1.4
       ..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(rect.left + 2.5, rect.top + 2.5),
-        Offset(rect.right - 2.5, rect.top + 2.5), hl);
-    canvas.drawLine(Offset(rect.left + 2.5, rect.top + 2.5),
-        Offset(rect.left + 2.5, rect.bottom - 2.5),
-        hl..color = Colors.white.withValues(alpha: 0.26));
+    canvas.drawLine(
+      Offset(rect.left + 2.5, rect.top + 2.5),
+      Offset(rect.right - 2.5, rect.top + 2.5),
+      hl,
+    );
+    canvas.drawLine(
+      Offset(rect.left + 2.5, rect.top + 2.5),
+      Offset(rect.left + 2.5, rect.bottom - 2.5),
+      hl..color = Colors.white.withValues(alpha: 0.26),
+    );
 
     // Subtle outline for definition.
     canvas.drawRRect(
@@ -68,8 +78,10 @@ class Blocks {
 
   /// Paints the ghost (landing preview) of the active piece.
   static void paintGhost(Canvas canvas, Rect rect, Color color) {
-    final r =
-        RRect.fromRectAndRadius(rect.deflate(0.5), const Radius.circular(4));
+    final r = RRect.fromRectAndRadius(
+      rect.deflate(0.5),
+      const Radius.circular(4),
+    );
     canvas.drawRRect(r, Paint()..color = color.withValues(alpha: 0.10));
     canvas.drawRRect(
       r,

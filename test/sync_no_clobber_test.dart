@@ -14,16 +14,16 @@ import 'package:g42/core/models/room.dart';
 /// 깊게 머지하므로 동시 기록이 서로를 보존한다. 아래 테스트가 그 불변식을 고정한다.
 void main() {
   Room baseRoom(String gameId, Map<String, dynamic> state) => Room(
-        code: 'ABCD',
-        gameId: gameId,
-        status: RoomStatus.playing,
-        players: const [
-          RoomPlayer(id: 'p0', name: '호스트'),
-          RoomPlayer(id: 'p1', name: '게스트'),
-        ],
-        hostId: 'p0',
-        state: state,
-      );
+    code: 'ABCD',
+    gameId: gameId,
+    status: RoomStatus.playing,
+    players: const [
+      RoomPlayer(id: 'p0', name: '호스트'),
+      RoomPlayer(id: 'p1', name: '게스트'),
+    ],
+    hostId: 'p0',
+    state: state,
+  );
 
   group('반응속도 — 동시 탭이 서로를 덮어쓰지 않는다', () {
     test('(버그 재현) 전체 state 통째 제출은 한쪽 반응시간을 0으로 덮어쓴다', () {
@@ -73,18 +73,16 @@ void main() {
       room = room.applyPatch({'state.done.p0': true});
       room = room.applyPatch({'state.done.p1': true});
       final done = room.state['done'] as Map;
-      final everyoneDone =
-          room.playerIds.every((p) => (done[p] as bool?) ?? false);
+      final everyoneDone = room.playerIds.every(
+        (p) => (done[p] as bool?) ?? false,
+      );
       expect(everyoneDone, true); // 호스트가 결과를 확정할 수 있다.
     });
 
     test('(수정) 동시 단어 제출(점수)도 서로 보존된다', () {
       var room = baseRoom('boggle', {
         'scores': {'p0': 0, 'p1': 0},
-        'found': {
-          'p0': <String>[],
-          'p1': <String>[],
-        },
+        'found': {'p0': <String>[], 'p1': <String>[]},
       });
       room = room.applyPatch({
         'state.scores.p0': 10,

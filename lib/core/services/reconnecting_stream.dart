@@ -60,10 +60,7 @@ class _Reconnector<T> {
     required this.delay,
   }) {
     _backoff = initialBackoff;
-    _controller = StreamController<T>(
-      onListen: _connect,
-      onCancel: _dispose,
-    );
+    _controller = StreamController<T>(onListen: _connect, onCancel: _dispose);
   }
 
   Stream<T> get stream => _controller.stream;

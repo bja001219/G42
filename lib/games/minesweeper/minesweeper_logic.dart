@@ -161,7 +161,10 @@ class MinesweeperState {
   /// 지뢰 인덱스 목록을 방어적으로 파싱.
   static List<int> mineList(Object? raw) {
     if (raw is List) {
-      return <int>[for (final v in raw) if (v is num) v.toInt()];
+      return <int>[
+        for (final v in raw)
+          if (v is num) v.toInt(),
+      ];
     }
     return <int>[];
   }
