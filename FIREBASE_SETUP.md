@@ -1,7 +1,7 @@
 # Firebase 온라인 멀티플레이 설정
 
-G42는 Firebase가 **설정돼 있으면 온라인 대전**, 없으면 자동으로 **로컬(동일 기기 핫시트)**
-모드로 실행된다. 아래는 온라인을 켜는 절차다.
+G42는 Firebase 초기화와 익명 인증이 모두 성공하면 **온라인 대전**, 실패하면 로컬
+전송 구현으로 폴백합니다. 현재 사용자 흐름은 두 기기 온라인 대전을 중심으로 검증했습니다.
 
 ## 1. 도구 설치 (최초 1회)
 
@@ -49,21 +49,25 @@ await Firebase.initializeApp(
 Firebase 콘솔 → **Firestore Database** → 데이터베이스 만들기 →
 **Native 모드** → 위치 선택.
 
-보안 규칙은 `firestore.rules` 참고(이미 `rooms` + 고스톱 전적용 `profiles`/`headtohead`
-규칙 포함). 데모용으로는 다음(개방형)으로 시작할 수 있다:
+Firebase 콘솔 → **Authentication** → **Sign-in method**에서 **Anonymous** 로그인을
+활성화합니다. 앱은 인증에 실패하면 Firestore를 사용하지 않습니다.
+
+보안 규칙은 `firestore.rules`를 사용합니다. 저장소의 기본 규칙은 인증된 사용자만
+`rooms`, `profiles`, `headtohead`에 접근할 수 있게 하는 데모 수준의 최소 경계입니다.
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /rooms/{code}        { allow read, write: if true; } // ⚠ 데모용
-    match /profiles/{id}       { allow read, write: if true; } // 고스톱 통산 전적
-    match /headtohead/{key}    { allow read, write: if true; } // 고스톱 상대 전적
+    match /rooms/{code}        { allow read, write: if request.auth != null; }
+    match /profiles/{id}       { allow read, write: if request.auth != null; }
+    match /headtohead/{key}    { allow read, write: if request.auth != null; }
   }
 }
 ```
-> ⚠ 모두 데모/개발용 개방형. 운영 전 Firebase Auth + 본인/당사자 문서만 쓰기,
-> 카운터 increment 검증으로 강화할 것.
+> ⚠ 익명 사용자는 누구나 인증을 받을 수 있으므로 이것은 운영 수준 권한 모델이 아닙니다.
+> 운영 전에는 계정 UID를 플레이어와 결합하고, 방 멤버만 상태를 쓰며, 전적 카운터가 허용된
+> 방향으로만 바뀌는지 규칙 또는 신뢰된 서버에서 검증해야 합니다.
 
 배포:
 
@@ -96,5 +100,5 @@ profiles/{playerId}   = { playerId, name, totalScore, wins, losses, rounds, naga
 headtohead/{pairKey}  = { pairKey, wins:{pid:n}, scores:{pid:n}, rounds, nagari }
 ```
 
-> 온라인 미설정(로컬 폴백) 상태에서는 전적이 기기 `shared_preferences`에 저장된다.
+> 온라인 미설정(로컬 폴백) 상태에서는 전적이 기기 `shared_preferences`에 저장됩니다.
 > Firebase를 켜면 자동으로 Firestore의 위 컬렉션을 사용한다.

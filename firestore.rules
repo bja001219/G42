@@ -3,23 +3,25 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // G42 게임 방.
-    // ⚠ 데모/개발용 개방형 규칙. 운영 전에는 Firebase Auth + 방 멤버 검증으로 강화할 것.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // G42 게임 방. 클라이언트는 Firebase 익명 인증을 완료한 뒤에만 접근한다.
+    // 익명 인증은 데모 환경의 최소 경계이며, 운영 서비스에서는 사용자 계정과
+    // room.players를 request.auth.uid에 결합하는 멤버 권한 검증이 추가로 필요하다.
     match /rooms/{code} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // 플레이어 통산 전적. profiles/{playerId} 문서 1개 = PlayerStats 1개.
-    // ⚠ 데모/개발용 개방형 규칙. 운영 전에는 Firebase Auth + 본인 문서만 쓰기 가능하도록,
-    //    그리고 카운터가 increment 로만 증가하도록 강화할 것.
     match /profiles/{id} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // 상대 전적. headtohead/{pairKey} 문서 1개 = HeadToHead 1개.
-    // ⚠ 데모/개발용 개방형 규칙. 운영 전에는 Firebase Auth + 매치업 당사자만 쓰기 가능하도록 강화할 것.
     match /headtohead/{key} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
   }
 }
